@@ -20,7 +20,9 @@
 #include <algorithm>
 #include <map>
 #include <string.h>
-#include "plot_difference.h"
+#include "distributions_difference.h"
+#include "shift.h"
+#include "magnet.h"
 using std::cout;
 using std::endl;
 using std::vector;
@@ -32,105 +34,6 @@ using std::sqrt;
 using std::string;
 using std::ifstream;
 using std::istringstream;
-
-class Shift {
-public:
-  Shift();
-
-  Shift(double, double, double);
-
-  double GetXShift() const;
-
-  double GetYShift() const;
-
-  double GetZShift() const;
-
-private:
-  double dx; 
-  double dy; 
-  double dz;
-};
-
-Shift::Shift() : dx(0), dy(0), dz(0) {}
-
-Shift::Shift(double dx, double dy, double dz)
-    : dx(dx), dy(dy), dz(dz) {}
-
-double Shift::GetXShift() const {
-  return dx;
-}
-
-double Shift::GetYShift() const {
-  return dy;
-}
-
-double Shift::GetZShift() const {
-  return dz;
-}
-
-class Magnet {
-public:
-  Magnet(const string&, int id);
-
-  string GetType() const;
-
-  int GetId() const;
-
-private:
-  string type = "";
-  int id = 0;
-};
-
-Magnet::Magnet(const string& type, int id) 
-  : type(type), id(id) {}
-
-string Magnet::GetType() const {
-  return type;
-}
-
-int Magnet::GetId() const {
-  return id;
-}
-
-class Dipole : public Magnet {
-public:
-  Dipole(int id) ;
-};
-
-Dipole::Dipole(int id) 
-  : Magnet("dipole", id) {}
-
-class Quadrupole : public Magnet {
-public:
-  Quadrupole(int id);
-};
-
-Quadrupole::Quadrupole(int id) 
-  : Magnet("quadrupole", id) {}
-
-class VerticalKicker : public Magnet {
-public:
-  VerticalKicker(int id);
-};
-
-VerticalKicker::VerticalKicker(int id) 
-  : Magnet("vertical_kicker", id) {}
-
-class HorizontalKicker : public Magnet {
-public:
-  HorizontalKicker(int id);
-};
-
-HorizontalKicker::HorizontalKicker(int id) 
-  : Magnet("horizontal_kicker", id) {}
-
-// 6 quadrupoles, 2 dipoles, 5 horizotal kickers and 5 vertical kickers
-struct MagnetIdIterators {
-  int dipole_it = 0;
-  int quadrupole_it = 0;
-  int vertical_kicker_it = 0;
-  int horizontal_kicker_it = 0;
-};
 
 bool operator < (Magnet lhs, Magnet rhs) {
   if (lhs.GetType() != rhs.GetType()) {
@@ -147,6 +50,14 @@ bool operator == (Magnet lhs, Magnet rhs) {
     return 0;
   }
 }
+
+// 6 quadrupoles, 2 dipoles, 5 horizotal kickers and 5 vertical kickers
+struct MagnetIdIterators {
+  int dipole_it = 0;
+  int quadrupole_it = 0;
+  int vertical_kicker_it = 0;
+  int horizontal_kicker_it = 0;
+};
 
 class FileName {
 public:

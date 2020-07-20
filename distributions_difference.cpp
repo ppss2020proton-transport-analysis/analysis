@@ -32,26 +32,26 @@ DistributionsDifference::DistributionsDifference(
   for (int i = 0; i < vars1.size(); i++) {
     std::string hist_name = vars1[i].type + " difference";
 
-    tree1->SetBranchAddress(vars1[i].type, &vars1[i].value);
-    tree2->SetBranchAddress(vars2[i].type, &vars2[i].value);
+    tree1->SetBranchAddress(vars1[i].type.c_str(), &vars1[i].value);
+    tree2->SetBranchAddress(vars2[i].type.c_str(), &vars2[i].value);
 
-    var_name_to_hist1[vars1[i].type] = new TH1F(vars1[i].type,
-                                            vars1[i].type,
+    var_name_to_hist1[vars1[i].type] = new TH1F(vars1[i].type.c_str(),
+                                            vars1[i].type.c_str(),
                                             100,
-                                            tree1->GetMinimum(vars1[i].type),
-                                            tree1->GetMaximum(vars1[i].type));
+                                            tree1->GetMinimum(vars1[i].type.c_str()),
+                                            tree1->GetMaximum(vars1[i].type.c_str()));
 
-    var_name_to_hist2[vars2[i].type] = new TH1F(vars2[i].type,
-                                            vars2[i].type,
+    var_name_to_hist2[vars2[i].type] = new TH1F(vars2[i].type.c_str(),
+                                            vars2[i].type.c_str(),
                                             100,
-                                            tree2->GetMinimum(vars2[i].type),
-                                            tree2->GetMaximum(vars2[i].type));
+                                            tree2->GetMinimum(vars2[i].type.c_str()),
+                                            tree2->GetMaximum(vars2[i].type.c_str()));
 
-    var_name_to_hist_1d_diffs[hist_name] = new TH1F(hist_name,
-                                          hist_name + " between optics",
+    var_name_to_hist_1d_diffs[hist_name] = new TH1F(hist_name.c_str(),
+                                          (hist_name + " between optics").c_str(),
                                           100,
-                                          tree1->GetMinimum(vars1[i].type),
-                                          tree1->GetMaximum(vars1[i].type));
+                                          tree1->GetMinimum(vars1[i].type.c_str()),
+                                          tree1->GetMaximum(vars1[i].type.c_str()));
   }
 
   Long64_t nentries = tree1->GetEntriesFast();
@@ -82,10 +82,10 @@ std::map<std::string, double> DistributionsDifference::GetRMSs(const std::string
 
 std::map<std::string, double> DistributionsDifference::GetMeans(const std::string& set_name) const {
   std::map<std::string, double> var_name_to_mean;
-  VarNameToHist var_name_to_hist = set_name_to_histosat(set_name);
+  VarNameToHist var_name_to_hist = set_name_to_histos.at(set_name);
 
   for (const auto& [var_name, hist] : var_name_to_hist) {
-    var_name_to_rms[var_name] = hist->GetMean();
+    var_name_to_mean[var_name] = hist->GetMean();
   }
   return var_name_to_mean;
 }
