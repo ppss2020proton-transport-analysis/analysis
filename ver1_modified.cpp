@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <map>
 #include <string.h>
+#include "plot_difference.h"
 using std::cout;
 using std::endl;
 using std::vector;
@@ -34,22 +35,15 @@ using std::istringstream;
 
 class Shift {
 public:
-  Shift() : dx(0), dy(0), dz(0) {}
+  Shift();
 
-  Shift(double dx, double dy, double dz)
-    : dx(dx), dy(dy), dz(dz) {}
+  Shift(double, double, double);
 
-  double GetXShift() const {
-    return dx;
-  }
+  double GetXShift() const;
 
-  double GetYShift() const {
-    return dy;
-  }
+  double GetYShift() const;
 
-  double GetZShift() const {
-    return dz;
-  }
+  double GetZShift() const;
 
 private:
   double dx; 
@@ -57,47 +51,78 @@ private:
   double dz;
 };
 
+Shift::Shift() : dx(0), dy(0), dz(0) {}
+
+Shift::Shift(double dx, double dy, double dz)
+    : dx(dx), dy(dy), dz(dz) {}
+
+double Shift::GetXShift() const {
+  return dx;
+}
+
+double Shift::GetYShift() const {
+  return dy;
+}
+
+double Shift::GetZShift() const {
+  return dz;
+}
+
 class Magnet {
 public:
-  Magnet(const string& type = "", int id = 0) 
-    : type(type), id(id) {}
+  Magnet(const string&, int id);
 
-  string GetType() const {
-    return type;
-  }
+  string GetType() const;
 
-  int GetId() const {
-    return id;
-  }
+  int GetId() const;
 
 private:
-  string type;
-  int id;
+  string type = "";
+  int id = 0;
 };
+
+Magnet::Magnet(const string& type, int id) 
+  : type(type), id(id) {}
+
+string Magnet::GetType() const {
+  return type;
+}
+
+int Magnet::GetId() const {
+  return id;
+}
 
 class Dipole : public Magnet {
 public:
-  Dipole(int id) 
-    : Magnet("dipole", id) {}
+  Dipole(int id) ;
 };
+
+Dipole::Dipole(int id) 
+  : Magnet("dipole", id) {}
 
 class Quadrupole : public Magnet {
 public:
-  Quadrupole(int id) 
-    : Magnet("quadrupole", id) {}
+  Quadrupole(int id);
 };
+
+Quadrupole::Quadrupole(int id) 
+  : Magnet("quadrupole", id) {}
 
 class VerticalKicker : public Magnet {
 public:
-  VerticalKicker(int id) 
-    : Magnet("vertical_kicker", id) {}
+  VerticalKicker(int id);
 };
+
+VerticalKicker::VerticalKicker(int id) 
+  : Magnet("vertical_kicker", id) {}
 
 class HorizontalKicker : public Magnet {
 public:
-  HorizontalKicker(int id) 
-    : Magnet("horizontal_kicker", id) {}
+  HorizontalKicker(int id);
 };
+
+HorizontalKicker::HorizontalKicker(int id) 
+  : Magnet("horizontal_kicker", id) {}
 
 // 6 quadrupoles, 2 dipoles, 5 horizotal kickers and 5 vertical kickers
 struct MagnetIdIterators {
@@ -155,31 +180,33 @@ public:
     std::string shift_value = "shift_value_";
 
     if (!magnet_to_shift.empty()) {
-      for (const auto& m_t_s : magnet_to_shift) {
+      for (const auto& [magnet, shift] : magnet_to_shift) {
         shift_type += "axis_";
         shift_value += "axis_";
-        magnet_type += m_t_s.first.GetType();
-        magnet_id += std::to_string(m_t_s.first.GetId());
+        magnet_type += magnet.GetType();
+        magnet_id += std::to_string(magnet.GetId());
 
-        if (m_t_s.second.GetXShift() != 0) {
+        if (shift.GetXShift() != 0) {
           shift_type += "x_";
-          shift_value += std::to_string(m_t_s.second.GetXShift()) + "_";
+          shift_value += std::to_string(shift.GetXShift()) + "_";
         }
 
-        if (m_t_s.second.GetYShift() != 0) {
+        if (shift.GetYShift() != 0) {
           shift_type += "y_";
-          shift_value += std::to_string(m_t_s.second.GetYShift()) + "_";
+          shift_value += std::to_string(shift.GetYShift()) + "_";
         }
 
-        if (m_t_s.second.GetZShift() != 0) {
+        if (shift.GetZShift() != 0) {
           shift_type += "z_";
-          shift_value += std::to_string(m_t_s.second.GetZShift()) + "_";
+          shift_value += std::to_string(shift.GetZShift()) + "_";
         }
       }
 
       root_save_location += magnet_type + "/" + magnet_id + "/" + 
                             shift_type + "/" + shift_value + ".root";
     }
+
+    if (!magnet_to_ratio.empty());
 
     gSystem->mkdir(root_save_location.c_str(), kTRUE);
 
@@ -785,6 +812,7 @@ int main() {
     p_ratio->PrepareBeamline(false);
     p_ratio->SetStrengthRatio(Quadrupole(1), strength_ratios[i]);
     p_ratio->SetShift(Quadrupole(1), Shift(0.1, 1, 3));
+    p_ratio->SetShift(Quadrupole(2), Shift(0, 1.2, 3));
     p_ratio->simple_tracking(205.);
   }
 
