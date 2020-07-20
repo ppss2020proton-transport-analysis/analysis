@@ -135,12 +135,15 @@ class ProtonTransport {
     double GetBeampipeSeparation();
     void SetShift(const Magnet&, const Shift&);
     void DoShift(const Magnet&, const string&);
+    void SetStrengthRatio(const Magnet&, double);
+    void ApplyStrengthRatio(const Magnet&, double&);
   private:
     double IP1Pos;
     double x, y, z, px, py, pz, sx, sy;
     std::map<Magnet, Shift> magnet_to_shift;
     MagnetIdIterators iterators;
     bool is_shifted = false;
+    std::map<Magnet, double> magnet_to_ratio;
     //obj type -diplole quadrupole etc
     //shift obj id 1st 2dn dipole etc ; shift value - self explanatory ;shift axis_axis- x y z strength - condition applied in magnet methods
     // values or vectors- depending if we'll shift 2 things at once - if not values will work
@@ -260,6 +263,7 @@ void ProtonTransport::simple_drift(double L, bool verbose=false){
 void ProtonTransport::simple_rectangular_dipole(double L, double K0L){
   iterators.dipole_it += 1;
   DoShift(Dipole{iterators.dipole_it}, "subtract");
+  ApplyStrengthRatio(Dipole{iterators.dipole_it}, K0L);
 
   if (fabs(K0L) < 1.e-15)
   {
@@ -278,6 +282,7 @@ void ProtonTransport::simple_rectangular_dipole(double L, double K0L){
 void ProtonTransport::simple_horizontal_kicker(double L, double HKICK){
   iterators.horizontal_kicker_it += 1;
   DoShift(HorizontalKicker{iterators.horizontal_kicker_it}, "subtract");
+  ApplyStrengthRatio(HorizontalKicker{iterators.horizontal_kicker_it}, HKICK);
 
 
   if (fabs(HKICK) < 1.e-15)
@@ -296,6 +301,7 @@ void ProtonTransport::simple_horizontal_kicker(double L, double HKICK){
 void ProtonTransport::simple_vertical_kicker(double L, double VKICK){
   iterators.vertical_kicker_it += 1;
   DoShift(VerticalKicker{iterators.vertical_kicker_it}, "subtract");
+  ApplyStrengthRatio(VerticalKicker{iterators.vertical_kicker_it}, VKICK);
 
   if (fabs(VKICK) < 1.e-15)
   {
@@ -332,8 +338,19 @@ void ProtonTransport::DoShift(const Magnet& m, const string& command) {
   }
 }
 
+void ProtonTransport::SetStrengthRatio(const Magnet& m, double ratio) {
+  magnet_to_ratio[m] = ratio;
+}
+
+void ProtonTransport::ApplyStrengthRatio(const Magnet& m, double& strength) {
+  if (magnet_to_ratio.find(m) != magnet_to_ratio.end()) {
+    strength = strength * magnet_to_ratio.at(m);
+  }
+}
+
 void ProtonTransport::simple_quadrupole(double L, double K1L, bool verbose=false){
   iterators.quadrupole_it += 1;
+  ApplyStrengthRatio(Quadrupole{iterators.quadrupole_it}, K1L);
 
   if (fabs(K1L) < 1.e-15)
   {
@@ -699,7 +716,6 @@ int main() {
 
     while (file=(TSystemFile*)next()) {
       fname = file->GetName();
-      std::cout << "hey there" << endl; 
       if (!file->IsDirectory() && fname.BeginsWith("alfaTwiss")) {
         ProtonTransport* p_default = new ProtonTransport;
         ProtonTransport* p_shifted = new ProtonTransport;
