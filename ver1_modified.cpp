@@ -72,60 +72,20 @@ public:
   }
 
   void ProcessFileName() {
-    std::string root_save_location = "root_PPSS_2020/";
     output_filename += "root_PPSS_2020/";
-
-    unsigned first = init_filename.find(".txt_") + strlen(".txt_");
-    unsigned last = init_filename.find("murad");
-
-    std::string optics_name = "";
-    optics_name.push_back(init_filename[26]);
-    optics_name += "optics_" + init_filename.substr(first, last - first) + "/";
-
-    output_filename += optics_name;
-    root_save_location += optics_name;
-
-    std::string magnet_type = "magnet_";
-    std::string magnet_id = "id_";
-    std::string shift_type = "shift_";
-    std::string shift_value = "shift_value_";
+    output_filename.push_back(init_filename[26]);
 
     if (!magnet_to_shift.empty()) {
-      for (const auto& [magnet, shift] : magnet_to_shift) {
-        shift_type += "axis_";
-        shift_value += "axis_";
-        magnet_type += magnet.GetType();
-        magnet_id += std::to_string(magnet.GetId());
-
-        if (shift.GetXShift() != 0) {
-          shift_type += "x_";
-          shift_value += std::to_string(shift.GetXShift()) + "_";
-        }
-
-        if (shift.GetYShift() != 0) {
-          shift_type += "y_";
-          shift_value += std::to_string(shift.GetYShift()) + "_";
-        }
-
-        if (shift.GetZShift() != 0) {
-          shift_type += "z_";
-          shift_value += std::to_string(shift.GetZShift()) + "_";
-        }
-      }
-
-      root_save_location += magnet_type + "/" + magnet_id + "/" + 
-                            shift_type + "/" + shift_value + ".root";
+      output_filename += "_shifted_";
     }
 
-    if (!magnet_to_ratio.empty());
-
-    gSystem->mkdir(root_save_location.c_str(), kTRUE);
-
-    if (!magnet_to_shift.empty()) {
-      output_filename = root_save_location;
-    } else {
-      output_filename += "default.root";
+    if (!magnet_to_ratio.empty()) {
+      output_filename += "_changed_strength_";
     }
+
+    output_filename += "pythia8_13TeV_protons_100k_transported_205m" + 
+                                   init_filename.substr(init_filename.find("_beta")) + 
+                                   ".root";
   }
 
   std::string GetOutputFileName() const {
@@ -714,17 +674,39 @@ void ProtonTransport::simple_tracking(double obs_point){
 
 int main() {
   std::string optics_file_name = "optics_PPSS_2020/alfaTwiss1.txt_beta40cm_6500GeV_y-185murad";
+  std::string changes_filename = "changes.csv";
+
   double strength_ratios[] = {0.95, 0.99, 0.995, 0.999, 1.001, 1.005, 1.01, 1.05};
   double shift_values[] = {-0.0005, -0.0002, -0.0001, 0.0001, 0.0002, 0.0005};
 
+  ProtonTransport* p_default = new ProtonTransport;
+
+  p_default->SetProcessedFileName(optics_file_name);
+  p_default->PrepareBeamline(false);
+  p_default->simple_tracking(205.);
+
+  delete p_default;
+
+  for (int i = 0; i < sizeof(shift_values)/sizeof(shift_values[0]); i++) {
+    ProtonTransport* p_shifted = new ProtonTransport;
+
+    p_shifted->SetProcessedFileName(optics_file_name);
+    p_shifted->PrepareBeamline(false);
+    p_shifted->SetShift(Quadrupole(1), Shift(shift_values[i], 0, 0));
+    p_shifted->simple_tracking(205.);
+
+    delete p_shifted;
+  }
+
   for (int i = 0; i < sizeof(strength_ratios)/sizeof(strength_ratios[0]); i++) {
     ProtonTransport* p_ratio = new ProtonTransport;
+
     p_ratio->SetProcessedFileName(optics_file_name);
     p_ratio->PrepareBeamline(false);
     p_ratio->SetStrengthRatio(Quadrupole(1), strength_ratios[i]);
-    p_ratio->SetShift(Quadrupole(1), Shift(0.1, 1, 3));
-    p_ratio->SetShift(Quadrupole(2), Shift(0, 1.2, 3));
     p_ratio->simple_tracking(205.);
+
+    delete p_ratio;
   }
 
 
