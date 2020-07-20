@@ -48,7 +48,7 @@ DistributionsDifference::DistributionsDifference(
                                             tree2->GetMaximum(vars2[i].type));
 
     var_name_to_hist_1d_diffs[hist_name] = new TH1F(hist_name,
-                                          hist_name + "between optics",
+                                          hist_name + " between optics",
                                           100,
                                           tree1->GetMinimum(vars1[i].type),
                                           tree1->GetMaximum(vars1[i].type));
@@ -60,9 +60,9 @@ DistributionsDifference::DistributionsDifference(
     tree2->GetEntry(i);
 
     for (int j = 0; j > vars1.size(); j++) {
-      var_name_to_hist1[vars1[j].type]->Fill(vars1[j].value);
-      var_name_to_hist2[vars2[j].type]->Fill(vars2[j].value);
-      var_name_to_hist_1d_diffs[vars1[j].type + " difference"]->Fill(vars1[j].value - vars2[j].value);
+      var_name_to_hist1.at(vars1[j].type)->Fill(vars1[j].value);
+      var_name_to_hist2.at(vars2[j].type)->Fill(vars2[j].value);
+      var_name_to_hist_1d_diffs.at(vars1[j].type + " difference")->Fill(vars1[j].value - vars2[j].value);
     }
   }
   set_name_to_histos["histos1"] = var_name_to_hist1;
@@ -72,7 +72,7 @@ DistributionsDifference::DistributionsDifference(
 
 std::map<std::string, double> DistributionsDifference::GetRMSs(const std::string& set_name) const {
   std::map<std::string, double> var_name_to_rms;
-  VarNameToHist var_name_to_hist = set_name_to_histos[set_name];
+  VarNameToHist var_name_to_hist = set_name_to_histos.at(set_name);
 
   for (const auto& [var_name, hist] : var_name_to_hist) {
     var_name_to_rms[var_name] = hist->GetRMS();
@@ -82,7 +82,7 @@ std::map<std::string, double> DistributionsDifference::GetRMSs(const std::string
 
 std::map<std::string, double> DistributionsDifference::GetMeans(const std::string& set_name) const {
   std::map<std::string, double> var_name_to_mean;
-  VarNameToHist var_name_to_hist = set_name_to_histos[set_name];
+  VarNameToHist var_name_to_hist = set_name_to_histosat(set_name);
 
   for (const auto& [var_name, hist] : var_name_to_hist) {
     var_name_to_rms[var_name] = hist->GetMean();
