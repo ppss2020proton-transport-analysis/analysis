@@ -19,6 +19,11 @@
 #include <algorithm>
 #include <map>
 #include <filesystem>
+#include <TSystem.h>
+#include <chrono>
+
+
+
 using std::cout;
 using std::endl;
 using std::vector;
@@ -30,7 +35,7 @@ using std::sqrt;
 using std::string;
 using std::ifstream;
 using std::istringstream;
-
+using namespace std::chrono; 
 class Shift {
 public:
   Shift() : dx(0), dy(0), dz(0) {}
@@ -135,15 +140,12 @@ class ProtonTransport {
     double GetBeampipeSeparation();
     void SetShift(const Magnet&, const Shift&);
     void DoShift(const Magnet&, const string&);
-    void SetStrengthRatio(const Magnet&, double);
-    void ApplyStrengthRatio(const Magnet&, double&);
   private:
     double IP1Pos;
     double x, y, z, px, py, pz, sx, sy;
     std::map<Magnet, Shift> magnet_to_shift;
     MagnetIdIterators iterators;
     bool is_shifted = false;
-    std::map<Magnet, double> magnet_to_ratio;
     //obj type -diplole quadrupole etc
     //shift obj id 1st 2dn dipole etc ; shift value - self explanatory ;shift axis_axis- x y z strength - condition applied in magnet methods
     // values or vectors- depending if we'll shift 2 things at once - if not values will work
@@ -263,7 +265,6 @@ void ProtonTransport::simple_drift(double L, bool verbose=false){
 void ProtonTransport::simple_rectangular_dipole(double L, double K0L){
   iterators.dipole_it += 1;
   DoShift(Dipole{iterators.dipole_it}, "subtract");
-  ApplyStrengthRatio(Dipole{iterators.dipole_it}, K0L);
 
   if (fabs(K0L) < 1.e-15)
   {
@@ -282,7 +283,6 @@ void ProtonTransport::simple_rectangular_dipole(double L, double K0L){
 void ProtonTransport::simple_horizontal_kicker(double L, double HKICK){
   iterators.horizontal_kicker_it += 1;
   DoShift(HorizontalKicker{iterators.horizontal_kicker_it}, "subtract");
-  ApplyStrengthRatio(HorizontalKicker{iterators.horizontal_kicker_it}, HKICK);
 
 
   if (fabs(HKICK) < 1.e-15)
@@ -301,7 +301,6 @@ void ProtonTransport::simple_horizontal_kicker(double L, double HKICK){
 void ProtonTransport::simple_vertical_kicker(double L, double VKICK){
   iterators.vertical_kicker_it += 1;
   DoShift(VerticalKicker{iterators.vertical_kicker_it}, "subtract");
-  ApplyStrengthRatio(VerticalKicker{iterators.vertical_kicker_it}, VKICK);
 
   if (fabs(VKICK) < 1.e-15)
   {
@@ -338,19 +337,8 @@ void ProtonTransport::DoShift(const Magnet& m, const string& command) {
   }
 }
 
-void ProtonTransport::SetStrengthRatio(const Magnet& m, double ratio) {
-  magnet_to_ratio[m] = ratio;
-}
-
-void ProtonTransport::ApplyStrengthRatio(const Magnet& m, double& strength) {
-  if (magnet_to_ratio.find(m) != magnet_to_ratio.end()) {
-    strength = strength * magnet_to_ratio.at(m);
-  }
-}
-
 void ProtonTransport::simple_quadrupole(double L, double K1L, bool verbose=false){
   iterators.quadrupole_it += 1;
-  ApplyStrengthRatio(Quadrupole{iterators.quadrupole_it}, K1L);
 
   if (fabs(K1L) < 1.e-15)
   {
@@ -496,7 +484,7 @@ void ProtonTransport::PrepareBeamline(string filename, bool verbose=false){
   }
 }
 
-void ProtonTransport::simple_tracking(double obs_point, const string& optics_file_name){
+void ProtonTransport::simple_tracking(double obs_point, const string& input_string){
 
   int m_process_code;
   vector<float> *m_px;
@@ -541,25 +529,90 @@ void ProtonTransport::simple_tracking(double obs_point, const string& optics_fil
   float n_px, n_py, n_pz, n_e;
   float n_x, n_y, n_sx, n_sy;
   
+
+
+
+
   string optics_root_file_name = "root_PPSS_2020/";
-  if (optics_file_name[26] == '1') {
-    optics_root_file_name += "1_";
+  string root_save_location = "root_PPSS_2020/"; 
+
+
+  unsigned first=input_string.find(".txt_")+strlen(".txt_");
+;
+  unsigned last=input_string.find("murad");
+  string optics_name;
+
+    if (input_string[26] == '1') {
+    optics_name += "1_";
   } else {
-    optics_root_file_name += "2_";
+    optics_name += "2_";
   }
 
-  if (is_shifted) {
-    optics_root_file_name += "shifted_";
-  } else {
-    optics_root_file_name += "default_";
+  optics_name+="opt_"+input_string.substr(first,last-first)+"/";
+  optics_root_file_name+=optics_name;
+
+
+  root_save_location+=optics_name;
+  string mag_type="mag_";
+  string num_val="num_";
+  string shft_type="shft";
+  string shft_val="shfted_val_";
+ 
+  //cout<<root_save_location<<'\n';
+ 
+  if(is_shifted){
+
+
+    for(auto it = magnet_to_shift.cbegin(); it != magnet_to_shift.cend(); ++it)
+    {
+      // std::cout << it->first << " " << it->second.first << " " << it->second.second << "\n";
+      mag_type+=it->first.GeType()+"_";
+      num_val+=std::to_string(it->first.GetId())+"_";
+      if(it->second.GetXShift() != 0){
+        shft_type+= "_x";
+        shft_val+=std::to_string(it->second.GetXShift())+"_";
+      }
+
+      if(it->second.GetYShift() != 0){
+        shft_type+= "_y";
+        shft_val+=std::to_string(it->second.GetYShift())+"_";
+      }
+
+      if(it->second.GetZShift() != 0){
+        shft_type+= "_z";
+        shft_val+=std::to_string(it->second.GetZShift())+"_";
+      }
+
+    }
+
+    root_save_location+=mag_type+"/"+num_val+"/"+shft_type+"/"+shft_val+".root";
+
+  
   }
 
-  optics_root_file_name += "pythia8_13TeV_protons_100k_transported_205m" + 
-                                 optics_file_name.substr(optics_file_name.find("_beta")) + 
-                                 ".root";
+  //cout<<root_save_location<<'\n';
+
+  gSystem->mkdir(root_save_location.c_str(),kTRUE);
+
+  //optics_root_file_name += "pythia8_13TeV_protons_100k_transported_205m" + input_string.substr(input_string.find("_beta")) + ".root";
+    //optics_root_file_name += input_string.substr(input_string.find("_beta")) + ".root";
+  if(is_shifted){
+    optics_root_file_name=root_save_location;
+  }
+  else{
+    optics_root_file_name+="default.root";
+  }
 
   std::cout << "The ROOT output file: " << optics_root_file_name << std::endl << std::endl; 
   TFile * p = new TFile(optics_root_file_name.c_str(),"recreate");
+
+
+
+
+
+
+
+
 
   TH1F * cs = new TH1F("sigma", "cross-section [mb]", 1, 0., 1.);
   TH1F * efficiency = new TH1F("efficiency", "efficiency", 1, 0., 1.);
@@ -715,10 +768,14 @@ int main() {
     TIter next(list_of_files);
 
     while (file=(TSystemFile*)next()) {
+      std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+
       fname = file->GetName();
+      //std::cout << "hey there" << endl; 
       if (!file->IsDirectory() && fname.BeginsWith("alfaTwiss")) {
         ProtonTransport* p_default = new ProtonTransport;
         ProtonTransport* p_shifted = new ProtonTransport;
+        ProtonTransport* p_shifted2 = new ProtonTransport;
 
         std::string fname_str = string(path_to_optic_files) + string(fname.Data());
         std::cout << "Processing fie: " << fname_str << std::endl;
@@ -728,9 +785,20 @@ int main() {
 
         p_shifted->PrepareBeamline(fname_str, false);
         p_shifted->SetShift(Dipole{1}, Shift{0.0005, 0, 0});
+        p_shifted->SetShift(Quadrupole{4}, Shift{0, 0.0016, 0});
         p_shifted->simple_tracking(205., fname_str);
 
-        delete p_default, p_shifted;
+        p_shifted2->PrepareBeamline(fname_str, false);
+        p_shifted2->SetShift(Dipole{1}, Shift{0.0005, 0, 0});
+        p_shifted2->SetShift(Quadrupole{4}, Shift{0, 0.003, 0});
+        p_shifted2->simple_tracking(205., fname_str);
+
+        delete p_default, p_shifted,p_shifted2;
+       
+        std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+        std::cout << "Time difference = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
+
+
       }
     }
   }
