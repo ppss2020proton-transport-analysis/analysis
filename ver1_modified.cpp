@@ -11,6 +11,7 @@
 #include <unistd.h>
 
 #include <TFile.h>
+#include <TSystem.h>
 #include <TH1F.h>
 #include <TTree.h>
 #include <TROOT.h>
@@ -18,7 +19,7 @@
 #include <TList.h>
 #include <algorithm>
 #include <map>
-#include <filesystem>
+#include <string.h>
 using std::cout;
 using std::endl;
 using std::vector;
@@ -61,7 +62,7 @@ public:
   Magnet(const string& type = "", int id = 0) 
     : type(type), id(id) {}
 
-  string GeType() const {
+  string GetType() const {
     return type;
   }
 
@@ -107,15 +108,15 @@ struct MagnetIdIterators {
 };
 
 bool operator < (Magnet lhs, Magnet rhs) {
-  if (lhs.GeType() != rhs.GeType()) {
-    return lhs.GeType() < rhs.GeType();
+  if (lhs.GetType() != rhs.GetType()) {
+    return lhs.GetType() < rhs.GetType();
   } else {
     return lhs.GetId() < rhs.GetId(); 
   }
 }
 
 bool operator == (Magnet lhs, Magnet rhs) {
-  if ((lhs.GeType() == rhs.GeType()) && (lhs.GetId() == rhs.GetId())) {
+  if ((lhs.GetType() == rhs.GetType()) && (lhs.GetId() == rhs.GetId())) {
     return 1;
   } else {
     return 0;
@@ -123,25 +124,79 @@ bool operator == (Magnet lhs, Magnet rhs) {
 }
 
 class FileName {
+public:
   FileName(const std::string& init_filename, 
            const std::map<Magnet, Shift>& m_to_s, 
            const std::map<Magnet, double> m_to_r) 
     : init_filename(init_filename),
-      out_filename(""),
+      output_filename(""),
       magnet_to_shift(m_to_s), 
       magnet_to_ratio(m_to_r) 
   {
   }
 
-  void ProcessFileName();
+  void ProcessFileName() {
+    std::string root_save_location = "root_PPSS_2020/";
+    output_filename += "root_PPSS_2020/";
 
-  std::string GetOutFileName() const {
-    return out_filename;
+    unsigned first = init_filename.find(".txt_") + strlen(".txt_");
+    unsigned last = init_filename.find("murad");
+
+    std::string optics_name = "";
+    optics_name.push_back(init_filename[26]);
+    optics_name += "optics_" + init_filename.substr(first, last - first) + "/";
+
+    output_filename += optics_name;
+    root_save_location += optics_name;
+
+    std::string magnet_type = "magnet_";
+    std::string magnet_id = "id_";
+    std::string shift_type = "shift_";
+    std::string shift_value = "shift_value_";
+
+    if (!magnet_to_shift.empty()) {
+      for (const auto& m_t_s : magnet_to_shift) {
+        shift_type += "axis_";
+        shift_value += "axis_";
+        magnet_type += m_t_s.first.GetType();
+        magnet_id += std::to_string(m_t_s.first.GetId());
+
+        if (m_t_s.second.GetXShift() != 0) {
+          shift_type += "x_";
+          shift_value += std::to_string(m_t_s.second.GetXShift()) + "_";
+        }
+
+        if (m_t_s.second.GetYShift() != 0) {
+          shift_type += "y_";
+          shift_value += std::to_string(m_t_s.second.GetYShift()) + "_";
+        }
+
+        if (m_t_s.second.GetZShift() != 0) {
+          shift_type += "z_";
+          shift_value += std::to_string(m_t_s.second.GetZShift()) + "_";
+        }
+      }
+
+      root_save_location += magnet_type + "/" + magnet_id + "/" + 
+                            shift_type + "/" + shift_value + ".root";
+    }
+
+    gSystem->mkdir(root_save_location.c_str(), kTRUE);
+
+    if (!magnet_to_shift.empty()) {
+      output_filename = root_save_location;
+    } else {
+      output_filename += "default.root";
+    }
+  }
+
+  std::string GetOutputFileName() const {
+    return output_filename;
   }
 
 private:
   std::string init_filename;
-  std::string out_filename;
+  std::string output_filename;
   std::map<Magnet, Shift> magnet_to_shift;
   std::map<Magnet, double> magnet_to_ratio;
 };
@@ -568,21 +623,10 @@ void ProtonTransport::simple_tracking(double obs_point){
   int n_process_code;
   float n_px, n_py, n_pz, n_e;
   float n_x, n_y, n_sx, n_sy;
-  
-  std::string optics_root_file_name = "root_PPSS_2020/";
-  if (processed_filename[26] == '1') {
-    optics_root_file_name += "1_";
-  } else {
-    optics_root_file_name += "2_";
-  }
 
-  if (!magnet_to_shift.empty()) {
-    optics_root_file_name += "shifted_";
-  } 
-
-  optics_root_file_name += "pythia8_13TeV_protons_100k_transported_205m" + 
-                                 processed_filename.substr(processed_filename.find("_beta")) + 
-                                 ".root";
+  FileName* fn = new FileName(processed_filename, magnet_to_shift, magnet_to_ratio);
+  fn->ProcessFileName();
+  std::string optics_root_file_name = fn->GetOutputFileName();
 
   std::cout << "The ROOT output file: " << optics_root_file_name << std::endl << std::endl; 
   TFile * p = new TFile(optics_root_file_name.c_str(),"recreate");
@@ -740,6 +784,7 @@ int main() {
     p_ratio->SetProcessedFileName(optics_file_name);
     p_ratio->PrepareBeamline(false);
     p_ratio->SetStrengthRatio(Quadrupole(1), strength_ratios[i]);
+    p_ratio->SetShift(Quadrupole(1), Shift(0.1, 1, 3));
     p_ratio->simple_tracking(205.);
   }
 
