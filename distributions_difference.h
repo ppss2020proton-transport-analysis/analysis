@@ -13,15 +13,18 @@
 #include "TStyle.h"
 #include <TROOT.h>
 
+using VarNameToHist = std::map<std::string, TH1F*>;
+
 class DistributionsDifference {
 public:
   DistributionsDifference(const std::string&, const std::string&);
 
+  std::map<std::string, double> GetRMSs(const std::string&) const;
+
+  std::map<std::string, double> GetMeans(const std::string&) const;
+
 private:
-  std::map<std::string, TH1F*> name_to_hist1, 
-                               name_to_hist2, 
-                               name_to_hist_1d, 
-                               name_to_hist_2d;
+  std::map<std::string, VarNameToHist> set_name_to_histos;
 };
 
 #endif

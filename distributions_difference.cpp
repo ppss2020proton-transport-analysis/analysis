@@ -8,6 +8,11 @@ struct Variable {
 DistributionsDifference::DistributionsDifference(
     const std::string& fname1, const std::string& fname2) 
 {
+  VarNameToHist var_name_to_hist1, 
+                               var_name_to_hist2, 
+                               var_name_to_hist_1d_diffs, 
+                               var_name_to_hist_2d_diffs;
+
   TFile* file1 =  new TFile(fname1.c_str());
   TFile* file2 =  new TFile(fname2.c_str());
 
@@ -30,19 +35,19 @@ DistributionsDifference::DistributionsDifference(
     tree1->SetBranchAddress(vars1[i].type, &vars1[i].value);
     tree2->SetBranchAddress(vars2[i].type, &vars2[i].value);
 
-    name_to_hist1[vars1[i].type] = new TH1F(vars1[i].type,
+    var_name_to_hist1[vars1[i].type] = new TH1F(vars1[i].type,
                                             vars1[i].type,
                                             100,
                                             tree1->GetMinimum(vars1[i].type),
                                             tree1->GetMaximum(vars1[i].type));
 
-    name_to_hist2[vars2[i].type] = new TH1F(vars2[i].type,
+    var_name_to_hist2[vars2[i].type] = new TH1F(vars2[i].type,
                                             vars2[i].type,
                                             100,
                                             tree2->GetMinimum(vars2[i].type),
                                             tree2->GetMaximum(vars2[i].type));
 
-    name_to_hist_1d[hist_name] = new TH1F(hist_name,
+    var_name_to_hist_1d_diffs[hist_name] = new TH1F(hist_name,
                                           hist_name + "between optics",
                                           100,
                                           tree1->GetMinimum(vars1[i].type),
@@ -55,9 +60,32 @@ DistributionsDifference::DistributionsDifference(
     tree2->GetEntry(i);
 
     for (int j = 0; j > vars1.size(); j++) {
-      name_to_hist1[vars1[j].type]->Fill(vars1[j].value);
-      name_to_hist2[vars2[j].type]->Fill(vars2[j].value);
-      name_to_hist_1d[vars1[j].type + " difference"]->Fill(vars1[j].value - vars2[j].value);
+      var_name_to_hist1[vars1[j].type]->Fill(vars1[j].value);
+      var_name_to_hist2[vars2[j].type]->Fill(vars2[j].value);
+      var_name_to_hist_1d_diffs[vars1[j].type + " difference"]->Fill(vars1[j].value - vars2[j].value);
     }
   }
+  set_name_to_histos["histos1"] = var_name_to_hist1;
+  set_name_to_histos["histos2"] = var_name_to_hist2;
+  set_name_to_histos["histos_1d_diffs"] = var_name_to_hist_1d_diffs;
+}
+
+std::map<std::string, double> DistributionsDifference::GetRMSs(const std::string& set_name) const {
+  std::map<std::string, double> var_name_to_rms;
+  VarNameToHist var_name_to_hist = set_name_to_histos[set_name];
+
+  for (const auto& [var_name, hist] : var_name_to_hist) {
+    var_name_to_rms[var_name] = hist->GetRMS();
+  }
+  return var_name_to_rms;
+}
+
+std::map<std::string, double> DistributionsDifference::GetMeans(const std::string& set_name) const {
+  std::map<std::string, double> var_name_to_mean;
+  VarNameToHist var_name_to_hist = set_name_to_histos[set_name];
+
+  for (const auto& [var_name, hist] : var_name_to_hist) {
+    var_name_to_rms[var_name] = hist->GetMean();
+  }
+  return var_name_to_mean;
 }
