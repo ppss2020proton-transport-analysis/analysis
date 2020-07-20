@@ -555,7 +555,7 @@ void ProtonTransport::simple_tracking(double obs_point, const string& input_stri
   root_save_location+=optics_name;
   string mag_type="mag_";
   string num_val="num_";
-  string shft_type="shft";
+  string shft_type="shft_";
   string shft_val="shfted_val_";
  
   //cout<<root_save_location<<'\n';
@@ -566,20 +566,22 @@ void ProtonTransport::simple_tracking(double obs_point, const string& input_stri
     for(auto it = magnet_to_shift.cbegin(); it != magnet_to_shift.cend(); ++it)
     {
       // std::cout << it->first << " " << it->second.first << " " << it->second.second << "\n";
+      shft_type+= "axi_";
+      shft_val+="axi_";
       mag_type+=it->first.GeType()+"_";
       num_val+=std::to_string(it->first.GetId())+"_";
       if(it->second.GetXShift() != 0){
-        shft_type+= "_x";
+        shft_type+= "x_";
         shft_val+=std::to_string(it->second.GetXShift())+"_";
       }
 
       if(it->second.GetYShift() != 0){
-        shft_type+= "_y";
+        shft_type+= "y_";
         shft_val+=std::to_string(it->second.GetYShift())+"_";
       }
 
       if(it->second.GetZShift() != 0){
-        shft_type+= "_z";
+        shft_type+= "z_";
         shft_val+=std::to_string(it->second.GetZShift())+"_";
       }
 
@@ -774,26 +776,28 @@ int main() {
       //std::cout << "hey there" << endl; 
       if (!file->IsDirectory() && fname.BeginsWith("alfaTwiss")) {
         ProtonTransport* p_default = new ProtonTransport;
-        ProtonTransport* p_shifted = new ProtonTransport;
-        ProtonTransport* p_shifted2 = new ProtonTransport;
 
         std::string fname_str = string(path_to_optic_files) + string(fname.Data());
         std::cout << "Processing fie: " << fname_str << std::endl;
 
+
+
         p_default->PrepareBeamline(fname_str, false);
         p_default->simple_tracking(205., fname_str);
 
+        delete p_default;
+
+        ProtonTransport* p_shifted = new ProtonTransport;
+
+   
+
+
         p_shifted->PrepareBeamline(fname_str, false);
         p_shifted->SetShift(Dipole{1}, Shift{0.0005, 0, 0});
-        p_shifted->SetShift(Quadrupole{4}, Shift{0, 0.0016, 0});
+        p_shifted->SetShift(Quadrupole{1}, Shift{0.0005, 0.0001, 0});
         p_shifted->simple_tracking(205., fname_str);
 
-        p_shifted2->PrepareBeamline(fname_str, false);
-        p_shifted2->SetShift(Dipole{1}, Shift{0.0005, 0, 0});
-        p_shifted2->SetShift(Quadrupole{4}, Shift{0, 0.003, 0});
-        p_shifted2->simple_tracking(205., fname_str);
-
-        delete p_default, p_shifted,p_shifted2;
+        delete p_shifted;
        
         std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
         std::cout << "Time difference = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
