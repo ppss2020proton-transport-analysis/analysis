@@ -122,6 +122,30 @@ bool operator == (Magnet lhs, Magnet rhs) {
   }
 }
 
+class FileName {
+  FileName(const std::string& init_filename, 
+           const std::map<Magnet, Shift>& m_to_s, 
+           const std::map<Magnet, double> m_to_r) 
+    : init_filename(init_filename),
+      out_filename(""),
+      magnet_to_shift(m_to_s), 
+      magnet_to_ratio(m_to_r) 
+  {
+  }
+
+  void ProcessFileName();
+
+  std::string GetOutFileName() const {
+    return out_filename;
+  }
+
+private:
+  std::string init_filename;
+  std::string out_filename;
+  std::map<Magnet, Shift> magnet_to_shift;
+  std::map<Magnet, double> magnet_to_ratio;
+};
+
 class ProtonTransport {
   public:
     ProtonTransport(); //!< constructor 
