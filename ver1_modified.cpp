@@ -6,6 +6,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <string>
 #include <vector>
 #include <math.h>
 #include <unistd.h>
@@ -675,6 +676,8 @@ void ProtonTransport::simple_tracking(double obs_point){
 int main() {
   std::string optics_file_name = "optics_PPSS_2020/alfaTwiss1.txt_beta40cm_6500GeV_y-185murad";
   std::string changes_filename = "changes.csv";
+  std::string root_shifted_file_name = "root_PPSS_2020/1_shifted_pythia8_13TeV_protons_100k_transported_205m_beta40cm_6500GeV_y-185murad.root";
+  std::string root_default_file_name = "root_PPSS_2020/1pythia8_13TeV_protons_100k_transported_205m_beta40cm_6500GeV_y-185murad.root";
 
   double strength_ratios[] = {0.95, 0.99, 0.995, 0.999, 1.001, 1.005, 1.01, 1.05};
   double shift_values[] = {-0.0005, -0.0002, -0.0001, 0.0001, 0.0002, 0.0005};
@@ -694,6 +697,24 @@ int main() {
     p_shifted->PrepareBeamline(false);
     p_shifted->SetShift(Quadrupole(1), Shift(shift_values[i], 0, 0));
     p_shifted->simple_tracking(205.);
+
+    DistributionsDifference* diff = new DistributionsDifference(root_default_file_name, root_shifted_file_name);
+    std::map<std::string, double> var_name_to_rms = diff->GetRMSs("histos_1d_diffs");
+    std::map<std::string, double> var_name_to_mean = diff->GetMeans("histos_1d_diffs");
+
+    std::cout << "RMSs for shifted Quadrupole(1) by x axis values dx = " 
+              << std::to_string(shift_values[i]) << std::endl;
+    for (const auto& [var_name, rms] : var_name_to_rms) {
+      std::cout << var_name << "distribution RMS = " 
+                << std::to_string(rms) << std::endl; 
+    }
+
+    std::cout << "Means for shifted Quadrupole(1) by x axis values dx = " 
+              << std::to_string(shift_values[i]) << std::endl;
+    for (const auto& [var_name, mean] : var_name_to_mean) {
+      std::cout << var_name << "distribution Mean = " 
+                << std::to_string(mean) << std::endl; 
+    }
 
     delete p_shifted;
   }
