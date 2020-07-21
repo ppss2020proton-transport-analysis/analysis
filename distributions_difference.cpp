@@ -138,3 +138,23 @@ std::map<std::string, double> DistributionsDifference::GetMeans(const std::strin
   }
   return var_name_to_mean;
 }
+
+std::map<std::string, double> DistributionsDifference::GetRMSs_2D(const std::string& set_name) const {
+  std::map<std::string, double> var_name_to_rms;
+  VarNameToHist2D var_name_to_hist = set_name_to_histos2D.at(set_name);
+
+  for (const auto& [var_name, hist] : var_name_to_hist) {
+    var_name_to_rms[var_name] = hist->GetRMS();
+  }
+  return var_name_to_rms;
+}
+
+std::map<std::string, double> DistributionsDifference::GetMeans_2D(const std::string& set_name) const {
+  std::map<std::string, double> var_name_to_mean;
+  VarNameToHist2D var_name_to_hist = set_name_to_histos2D.at(set_name);
+
+  for (const auto& [var_name, hist] : var_name_to_hist) {
+    var_name_to_mean[var_name] = hist->GetMean();
+  }
+  return var_name_to_mean;
+}
