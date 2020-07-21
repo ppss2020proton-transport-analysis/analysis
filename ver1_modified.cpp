@@ -699,21 +699,21 @@ int main() {
     p_shifted->simple_tracking(205.);
 
     DistributionsDifference* diff = new DistributionsDifference(root_default_file_name, root_shifted_file_name);
-    std::map<std::string, double> var_name_to_rms = diff->GetRMSs("histos_1d_diffs");
-    std::map<std::string, double> var_name_to_mean = diff->GetMeans("histos_1d_diffs");
+    std::map<std::string, double> var_name_to_rms = diff->GetRMSs("histos2");
+    std::map<std::string, double> var_name_to_mean = diff->GetMeans("histos2");
 
     std::cout << "RMSs for shifted Quadrupole(1) by x axis values dx = " 
               << std::to_string(shift_values[i]) << std::endl;
     for (const auto& [var_name, rms] : var_name_to_rms) {
       std::cout << var_name << "distribution RMS = " 
-                << std::to_string(rms) << std::endl; 
+                << rms << std::endl; 
     }
 
     std::cout << "Means for shifted Quadrupole(1) by x axis values dx = " 
               << std::to_string(shift_values[i]) << std::endl;
     for (const auto& [var_name, mean] : var_name_to_mean) {
       std::cout << var_name << "distribution Mean = " 
-                << std::to_string(mean) << std::endl; 
+                << mean << std::endl; 
     }
 
     delete p_shifted;

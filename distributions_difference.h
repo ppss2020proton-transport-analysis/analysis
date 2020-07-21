@@ -2,6 +2,7 @@
 #define distributions_difference_h
 
 #include <string>
+#include <iostream>
 #include <vector>
 #include <map>
 #include "TH1F.h"

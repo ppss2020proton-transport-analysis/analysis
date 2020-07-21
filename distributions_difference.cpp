@@ -22,26 +22,34 @@ DistributionsDifference::DistributionsDifference(
   tree1->SetMakeClass(1);
   tree2->SetMakeClass(1);
 
-  std::vector<Variable> vars1, vars2 = {Variable{"x", 0},
-                                        Variable{"y", 0},
-                                        Variable{"sx", 0},
-                                        Variable{"sy", 0},
-                                        Variable{"px", 0},
-                                        Variable{"py", 0},
-                                        Variable{"pz", 0}};
+  std::vector<Variable> vars1 = {Variable{"x", 0},
+                                 Variable{"sx", 0},
+                                 Variable{"y", 0},
+                                 Variable{"sy", 0},
+                                 Variable{"px", 0},
+                                 Variable{"py", 0},
+                                 Variable{"pz", 0}};
+  std::vector<Variable> vars2 = {Variable{"x", 0},
+                                 Variable{"sx", 0},
+                                 Variable{"y", 0},
+                                 Variable{"sy", 0},
+                                 Variable{"px", 0},
+                                 Variable{"py", 0},
+                                 Variable{"pz", 0}};
+
   for (int i = 0; i < vars1.size(); i++) {
     std::string hist_name = vars1[i].type + " difference";
 
     tree1->SetBranchAddress(vars1[i].type.c_str(), &vars1[i].value);
     tree2->SetBranchAddress(vars2[i].type.c_str(), &vars2[i].value);
 
-    var_name_to_hist1[vars1[i].type] = new TH1F(vars1[i].type.c_str(),
-                                            vars1[i].type.c_str(),
-                                            100,
-                                            tree1->GetMinimum(vars1[i].type.c_str()),
-                                            tree1->GetMaximum(vars1[i].type.c_str()));
+    var_name_to_hist1[vars1[i].type] = new TH1F((vars1[i].type + "1").c_str(),
+                                                vars1[i].type.c_str(),
+                                                100,
+                                                tree1->GetMinimum(vars1[i].type.c_str()),
+                                                tree1->GetMaximum(vars1[i].type.c_str()));
 
-    var_name_to_hist2[vars2[i].type] = new TH1F(vars2[i].type.c_str(),
+    var_name_to_hist2[vars2[i].type] = new TH1F((vars2[i].type + "2").c_str(),
                                             vars2[i].type.c_str(),
                                             100,
                                             tree2->GetMinimum(vars2[i].type.c_str()),
@@ -59,7 +67,7 @@ DistributionsDifference::DistributionsDifference(
     tree1->GetEntry(i);
     tree2->GetEntry(i);
 
-    for (int j = 0; j > vars1.size(); j++) {
+    for (int j = 0; j < vars1.size(); j++) {
       var_name_to_hist1.at(vars1[j].type)->Fill(vars1[j].value);
       var_name_to_hist2.at(vars2[j].type)->Fill(vars2[j].value);
       var_name_to_hist_1d_diffs.at(vars1[j].type + " difference")->Fill(vars1[j].value - vars2[j].value);
