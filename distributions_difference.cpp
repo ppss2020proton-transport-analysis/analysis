@@ -94,14 +94,14 @@ DistributionsDifference::DistributionsDifference(
       var_name_to_hist1.at(vars1[j].type)->Fill(vars1[j].value);
       var_name_to_hist2.at(vars2[j].type)->Fill(vars2[j].value);
 
-        std::cout<<vars1[i].type + " difference"+"\n";
-      var_name_to_hist_1d_diffs.at(vars1[i].type + " difference")->Fill(vars1[j].value - vars2[j].value);
+      //std::cout<<vars1[j].type + " difference"+"\n";
+      var_name_to_hist_1d_diffs.at(vars1[j].type + " difference")->Fill(vars1[j].value - vars2[j].value);
 
        
       
       for (int k = 4; k < 7; ++k) //loop over momenta
       {
-          std::cout<<(vars1[j].type + " difference vs " + vars1[k].type +"\n");
+        //std::cout<<(vars1[j].type + " difference vs " + vars1[k].type +"\n");
         var_name_to_hist_2d_diffs.at(vars1[j].type + " difference vs " + vars1[k].type)->Fill(vars1[j].value - vars2[j].value,vars1[k].value);
 
       }
