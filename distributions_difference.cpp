@@ -39,27 +39,34 @@ DistributionsDifference::DistributionsDifference(
 
   for (int i = 0; i < vars1.size(); i++) {
     std::string hist_name = vars1[i].type + " difference";
+    double min, max;
 
     tree1->SetBranchAddress(vars1[i].type.c_str(), &vars1[i].value);
     tree2->SetBranchAddress(vars2[i].type.c_str(), &vars2[i].value);
 
+    min = tree1->GetMinimum(vars1[i].type.c_str());
+    max = tree1->GetMaximum(vars1[i].type.c_str());
     var_name_to_hist1[vars1[i].type] = new TH1F((vars1[i].type + "1").c_str(),
                                                 vars1[i].type.c_str(),
                                                 100,
-                                                tree1->GetMinimum(vars1[i].type.c_str()),
-                                                tree1->GetMaximum(vars1[i].type.c_str()));
+                                                min,
+                                                max);
 
+    min = tree2->GetMinimum(vars2[i].type.c_str());
+    max = tree2->GetMaximum(vars2[i].type.c_str());
     var_name_to_hist2[vars2[i].type] = new TH1F((vars2[i].type + "2").c_str(),
                                             vars2[i].type.c_str(),
                                             100,
-                                            tree2->GetMinimum(vars2[i].type.c_str()),
-                                            tree2->GetMaximum(vars2[i].type.c_str()));
+                                            min,
+                                            max);
 
+    min = tree1->GetMinimum(vars1[i].type.c_str()) - tree2->GetMaximum(vars2[i].type.c_str());
+    max = tree1->GetMaximum(vars1[i].type.c_str()) - tree2->GetMinimum(vars2[i].type.c_str());
     var_name_to_hist_1d_diffs[hist_name] = new TH1F(hist_name.c_str(),
                                           (hist_name + " between optics").c_str(),
-                                          100,
-                                          tree1->GetMinimum(vars1[i].type.c_str()),
-                                          tree1->GetMaximum(vars1[i].type.c_str()));
+                                          1000,
+                                          min,
+                                          max);
   }
 
   Long64_t nentries = tree1->GetEntriesFast();
