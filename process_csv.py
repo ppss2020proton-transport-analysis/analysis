@@ -27,7 +27,6 @@ def plot_diffs(filename, shift_axis):
         plt.figure(figsize=(16,9))
         for magnet in magnets:
             magnet_df = df.loc[(df["Magnet"] == magnet)]
-            print(magnet_df)
             plt.errorbar(x=magnet_df[shift_axis],
                          y=magnet_df[y_vals_names[i]], 
                          yerr=magnet_df[y_errs_names[i]], fmt='*', 
