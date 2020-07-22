@@ -6,17 +6,21 @@ from time import sleep
 def plot_diffs(filename, shift_axis):
     df = pd.read_csv(filename)
     
+    # Different color for each magnet
     colors = ["cyan", "green", "violet", "blue", "black", "yellow", "grey", "orange"]
     magnets = df["Magnet"].unique()
     
     magnets_to_colors = dict(zip(magnets, colors))
 
+    # In copy df delete all columns except those one with Mean and RMS
     df_copy = df.copy(deep=True)
     df_copy.drop(df_copy.iloc[:, 0:6], inplace=True, axis=1)
     
+    # Get columns names with non-zero values
     indicies = (df_copy != 0).any()
     y_vals = indicies.index[indicies].tolist()
 
+    # Separate those columns names by Mean and RMS
     y_vals_names = [i for i in y_vals if "Mean" in i]
     y_errs_names = [i for i in y_vals if "RMS" in i]
     
