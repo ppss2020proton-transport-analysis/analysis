@@ -10,9 +10,6 @@ def plot_diffs(filename, shift_axis):
     magnets = df["Magnet"].unique()
     
     magnets_to_colors = dict(zip(magnets, colors))
-    
-    #y_values_names = [i for i in df.columns if "Mean" in i]
-    #y_errors_names = [i for i in df.columns if "RMS" in i]
 
     df_copy = df.copy(deep=True)
     df_copy.drop(df_copy.iloc[:, 0:6], inplace=True, axis=1)
