@@ -38,7 +38,7 @@ DistributionsDifference::DistributionsDifference(
                                  Variable{"pz", 0}};
 
   for (int i = 0; i < vars1.size(); i++) {
-    std::string hist_name = vars1[i].type + " difference";
+    std::string hist_name = "d_" + vars1[i].type;
     double min, max;
 
     tree1->SetBranchAddress(vars1[i].type.c_str(), &vars1[i].value);
@@ -77,7 +77,7 @@ DistributionsDifference::DistributionsDifference(
     for (int j = 0; j < vars1.size(); j++) {
       var_name_to_hist1.at(vars1[j].type)->Fill(vars1[j].value);
       var_name_to_hist2.at(vars2[j].type)->Fill(vars2[j].value);
-      var_name_to_hist_1d_diffs.at(vars1[j].type + " difference")->Fill(vars1[j].value - vars2[j].value);
+      var_name_to_hist_1d_diffs.at("d_" + vars1[j].type)->Fill(vars1[j].value - vars2[j].value);
     }
   }
   set_name_to_histos["histos1"] = var_name_to_hist1;

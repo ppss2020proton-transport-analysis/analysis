@@ -4,6 +4,8 @@
  \date 21/03/2020
 */
 #include <iostream>
+#include <iomanip>
+#include <stdio.h>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -63,12 +65,12 @@ struct MagnetIdIterators {
 class FileName {
 public:
   FileName(const std::string& init_filename, 
-           const std::map<Magnet, Shift>& m_to_s, 
-           const std::map<Magnet, double> m_to_r) 
+           bool is_shifted, 
+           bool is_strength_changed) 
     : init_filename(init_filename),
       output_filename(""),
-      magnet_to_shift(m_to_s), 
-      magnet_to_ratio(m_to_r) 
+      is_shifted(is_shifted),
+      is_strength_changed(is_strength_changed)
   {
   }
 
@@ -76,11 +78,11 @@ public:
     output_filename += "root_PPSS_2020/";
     output_filename.push_back(init_filename[26]);
 
-    if (!magnet_to_shift.empty()) {
+    if (is_shifted) {
       output_filename += "_shifted_";
     }
 
-    if (!magnet_to_ratio.empty()) {
+    if (is_strength_changed) {
       output_filename += "_changed_strength_";
     }
 
@@ -96,8 +98,8 @@ public:
 private:
   std::string init_filename;
   std::string output_filename;
-  std::map<Magnet, Shift> magnet_to_shift;
-  std::map<Magnet, double> magnet_to_ratio;
+  bool is_shifted = false;
+  bool is_strength_changed = false;
 };
 
 class ProtonTransport {
@@ -116,12 +118,15 @@ class ProtonTransport {
     void SetStrengthRatio(const Magnet&, double);
     void ApplyStrengthRatio(const Magnet&, double&);
     void SetProcessedFileName(const std::string&);
+    std::string GetROOTOutputFileName() const;
+    void WriteChangesInCsv(const std::string&, DistributionsDifference*, int);
   private:
     double IP1Pos;
     double x, y, z, px, py, pz, sx, sy;
     std::map<Magnet, Shift> magnet_to_shift;
     MagnetIdIterators iterators;
     std::string processed_filename;
+    std::string optics_root_file_name;
     std::map<Magnet, double> magnet_to_ratio;
     //obj type -diplole quadrupole etc
     //shift obj id 1st 2dn dipole etc ; shift value - self explanatory ;shift axis_axis- x y z strength - condition applied in magnet methods
@@ -523,9 +528,9 @@ void ProtonTransport::simple_tracking(double obs_point){
   float n_px, n_py, n_pz, n_e;
   float n_x, n_y, n_sx, n_sy;
 
-  FileName* fn = new FileName(processed_filename, magnet_to_shift, magnet_to_ratio);
+  FileName* fn = new FileName(processed_filename, !magnet_to_shift.empty(), !magnet_to_ratio.empty());
   fn->ProcessFileName();
-  std::string optics_root_file_name = fn->GetOutputFileName();
+  optics_root_file_name = fn->GetOutputFileName();
 
   std::cout << "The ROOT output file: " << optics_root_file_name << std::endl << std::endl; 
   TFile * p = new TFile(optics_root_file_name.c_str(),"recreate");
@@ -673,11 +678,86 @@ void ProtonTransport::simple_tracking(double obs_point){
 
 }
 
+std::string ProtonTransport::GetROOTOutputFileName() const {
+  return optics_root_file_name;
+}
+
+void ProtonTransport::WriteChangesInCsv(const std::string& filename, DistributionsDifference* diff, int run_id) {
+  std::map<std::string, double> var_name_to_rms = diff->GetRMSs("histos_1d_diffs");
+  std::map<std::string, double> var_name_to_mean = diff->GetMeans("histos_1d_diffs");
+
+  std::ofstream f;
+  f.open(filename, std::fstream::app);
+  
+  // Check if file's not empty (or we already have columns names)
+  std::ifstream f_check;
+  f_check.open(filename);
+  if (f_check.peek() == std::ifstream::traits_type::eof()) {
+    f << "No," << std::setw(22) << "Magnet," << std::setw(9) 
+      << "x_shift," << std::setw(9) << "y_shift," << std::setw(9) << "z_shift," << std::setw(15) << "Strength ratio";
+    for (const auto& [var_name, rms] : var_name_to_rms) {
+      if (var_name.size() == 4) {
+        f << "," << std::setw(8) << "RMS(" << var_name << ")," << std::setw(9) << "Mean(" << var_name << ")"; 
+      } else {
+        f << "," << std::setw(9) << "RMS(" << var_name << ")," << std::setw(10) << "Mean(" << var_name << ")"; 
+      }
+    }
+    f << "\n";
+  }
+  f_check.close();
+  
+  int local_run_id = 1;
+  if (!magnet_to_shift.empty()) {
+    for (const auto& [magnet, shift] : magnet_to_shift) {
+      f << run_id << "." << local_run_id 
+        << "," << std::setw(17) << magnet.GetType() << "(" << magnet.GetId() << ")," 
+        << std::setw(8) << shift.GetXShift() << "," << std::setw(8) << shift.GetYShift() << "," 
+        << std::setw(8) << shift.GetZShift() << ","; 
+
+      if (magnet_to_ratio.find(magnet) != magnet_to_ratio.end()) {
+        f << std::setw(15) << magnet_to_ratio.at(magnet);
+      } else {
+        f << std::setw(15) << "1";
+      }
+
+      if (local_run_id == 1) {
+        for (const auto& [var_name, rms] : var_name_to_rms) {
+          f << "," << std::setw(13) << rms << "," 
+            << std::setw(14) << var_name_to_mean.at(var_name);
+        }
+      } else {
+        f << ",,,,,,,,,,,,,,";
+      }
+      ++local_run_id;
+    }
+  } else if (!magnet_to_ratio.empty()) {
+    for (const auto& [magnet, ratio] : magnet_to_ratio) {
+      f << run_id << "." << local_run_id 
+        << "," << std::setw(17) << magnet.GetType() << "(" << magnet.GetId() << ")," 
+        << std::setw(8) << 0 << "," << std::setw(8) << 0 << "," 
+        << std::setw(8) << 0 << ","; 
+
+      f << std::setw(15) << ratio;
+
+      if (local_run_id == 1) {
+        for (const auto& [var_name, rms] : var_name_to_rms) {
+          f << "," << std::setw(13) << rms << "," 
+            << std::setw(14) << var_name_to_mean.at(var_name);
+        }
+      } else {
+        f << ",,,,,,,,,,,,,,";
+      }
+      ++local_run_id;
+    }
+  }
+  f << "\n";
+  
+  f.close();
+}
+
 int main() {
   std::string optics_file_name = "optics_PPSS_2020/alfaTwiss1.txt_beta40cm_6500GeV_y-185murad";
-  std::string changes_filename = "changes.csv";
-  std::string root_shifted_file_name = "root_PPSS_2020/1_shifted_pythia8_13TeV_protons_100k_transported_205m_beta40cm_6500GeV_y-185murad.root";
-  std::string root_default_file_name = "root_PPSS_2020/1pythia8_13TeV_protons_100k_transported_205m_beta40cm_6500GeV_y-185murad.root";
+  std::string changes_fn = "changes.csv";
 
   double strength_ratios[] = {0.95, 0.99, 0.995, 0.999, 1.001, 1.005, 1.01, 1.05};
   double shift_values[] = {-0.0005, -0.0002, -0.0001, 0.0001, 0.0002, 0.0005};
@@ -688,8 +768,9 @@ int main() {
   p_default->PrepareBeamline(false);
   p_default->simple_tracking(205.);
 
-  delete p_default;
+  remove(changes_fn.c_str());
 
+  int run_id = 1;
   for (int i = 0; i < sizeof(shift_values)/sizeof(shift_values[0]); i++) {
     ProtonTransport* p_shifted = new ProtonTransport;
 
@@ -698,23 +779,9 @@ int main() {
     p_shifted->SetShift(Quadrupole(1), Shift(shift_values[i], 0, 0));
     p_shifted->simple_tracking(205.);
 
-    DistributionsDifference* diff = new DistributionsDifference(root_default_file_name, root_shifted_file_name);
-    std::map<std::string, double> var_name_to_rms = diff->GetRMSs("histos_1d_diffs");
-    std::map<std::string, double> var_name_to_mean = diff->GetMeans("histos_1d_diffs");
-
-    std::cout << "RMSs for shifted Quadrupole(1) by x axis values dx = " 
-              << std::to_string(shift_values[i]) << std::endl;
-    for (const auto& [var_name, rms] : var_name_to_rms) {
-      std::cout << var_name << " distribution RMS = " 
-                << rms << std::endl; 
-    }
-
-    std::cout << "Means for shifted Quadrupole(1) by x axis values dx = " 
-              << std::to_string(shift_values[i]) << std::endl;
-    for (const auto& [var_name, mean] : var_name_to_mean) {
-      std::cout << var_name << " distribution Mean = " 
-                << mean << std::endl; 
-    }
+    DistributionsDifference* diff = new DistributionsDifference(p_default->GetROOTOutputFileName(), 
+                                                                p_shifted->GetROOTOutputFileName());
+    p_shifted->WriteChangesInCsv(changes_fn, diff, run_id++);
 
     delete p_shifted;
   }
@@ -726,6 +793,10 @@ int main() {
     p_ratio->PrepareBeamline(false);
     p_ratio->SetStrengthRatio(Quadrupole(1), strength_ratios[i]);
     p_ratio->simple_tracking(205.);
+
+    DistributionsDifference* diff = new DistributionsDifference(p_default->GetROOTOutputFileName(), 
+                                                                p_ratio->GetROOTOutputFileName());
+    p_ratio->WriteChangesInCsv(changes_fn, diff, run_id++);
 
     delete p_ratio;
   }
