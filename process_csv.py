@@ -35,7 +35,7 @@ def plot_diffs(filename, shift_axis):
             plt.ylabel(y_vals_names[i])
         
         plt.legend(labels=magnets, loc="upper center")
-        plt.savefig(y_vals_names[i] + ".png", dpi=300)
+        plt.savefig(shift_axis + "_" + y_vals_names[i] + ".png", dpi=300)
         plt.show()
 
 plot_diffs("changes_x_shifting.csv", "x_shift")
