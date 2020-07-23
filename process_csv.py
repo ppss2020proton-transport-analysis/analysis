@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from time import sleep
+from os import listdir
+from os.path import isfile, join
 
 def plot_diffs(filename, shift_axis):
     df = pd.read_csv(filename)
@@ -39,5 +41,8 @@ def plot_diffs(filename, shift_axis):
         plt.savefig(shift_axis + "_" + y_vals_names[i] + ".png", dpi=300)
         plt.show()
 
-plot_diffs("changes_x_shifting.csv", "x_shift")
-plot_diffs("changes_y_shifting.csv", "y_shift")
+path = "./"
+filenames = [f for f in listdir(path) if isfile(join(path, f)) & (".csv" in f)]
+
+for filename in filenames:
+    plot_diffs(filename, filename.partition(".")[0])
