@@ -746,7 +746,7 @@ void ProtonTransport::WriteChangesInCsv(const std::string& filename, Distributio
   std::ifstream f_check;
   f_check.open(filename);
   if (f_check.peek() == std::ifstream::traits_type::eof()) {
-    f << "No," << "Magnet," << "x_shift," << "y_shift," << "z_shift," << "Strength_ratio";
+    f << "No," << "Magnet," << "Position," << "x_shift[m]," << "y_shift[m]," << "z_shift[m]," << "Strength_ratio";
     for (const auto& [var_name, rms] : var_name_to_rms) {
       f << "," << "RMS(" << var_name << ")," << "Mean(" << var_name << ")"; 
     }
@@ -757,7 +757,7 @@ void ProtonTransport::WriteChangesInCsv(const std::string& filename, Distributio
   int local_run_id = 1;
   if (!magnet_to_shift.empty()) {
     for (const auto& [magnet, shift] : magnet_to_shift) {
-      f << run_id << "_" << local_run_id 
+      f << run_id << "_" << local_run_id << "," << magnet.GetPosition()
         << "," << magnet.GetType() << "(" << magnet.GetId() << ")," 
         << shift.GetXShift() << "," << shift.GetYShift() << "," 
         << shift.GetZShift() << ","; 
@@ -780,7 +780,7 @@ void ProtonTransport::WriteChangesInCsv(const std::string& filename, Distributio
     }
   } else if (!magnet_to_ratio.empty()) {
     for (const auto& [magnet, ratio] : magnet_to_ratio) {
-      f << run_id << "." << local_run_id 
+      f << run_id << "." << local_run_id << "," << magnet.GetPosition()
         << "," << magnet.GetType() << "(" << magnet.GetId() << ")," 
         << 0 << "," << 0 << "," << 0 << ","; 
 
