@@ -257,7 +257,6 @@ void ProtonTransport::simple_drift(double L, bool verbose=false){
 void ProtonTransport::simple_rectangular_dipole(double L, double K0L){
   iterators.IncreaseItByOne("RBEND_it");
   //std::cout << "DIP" << iterators.GetIt("RBEND_it") << std::endl;
-  DoShift(Dipole{iterators.GetIt("RBEND_it")}, "subtract");
   ApplyStrengthRatio(Dipole{iterators.GetIt("RBEND_it")}, K0L);
 
   if (fabs(K0L) < 1.e-15)
@@ -265,6 +264,7 @@ void ProtonTransport::simple_rectangular_dipole(double L, double K0L){
     simple_drift(L);
     return;
   }
+  DoShift(Dipole{iterators.GetIt("RBEND_it")}, "subtract");
   z += L;
   x += L*sx + L*0.5*K0L*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
   y += L*sy;
@@ -277,7 +277,6 @@ void ProtonTransport::simple_rectangular_dipole(double L, double K0L){
 void ProtonTransport::simple_horizontal_kicker(double L, double HKICK){
   iterators.IncreaseItByOne("HKICKER_it");
   //std::cout << "HKICKER" << iterators.GetIt("HKICKER_it") << std::endl;
-  DoShift(HorizontalKicker{iterators.GetIt("HKICKER_it")}, "subtract");
   ApplyStrengthRatio(HorizontalKicker{iterators.GetIt("HKICKER_it")}, HKICK);
 
 
@@ -286,6 +285,7 @@ void ProtonTransport::simple_horizontal_kicker(double L, double HKICK){
     simple_drift(L);
     return;
   }
+  DoShift(HorizontalKicker{iterators.GetIt("HKICKER_it")}, "subtract");
   z += L;
   x += L*sx + L*0.5*HKICK*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
   y += L*sy;
@@ -297,7 +297,6 @@ void ProtonTransport::simple_horizontal_kicker(double L, double HKICK){
 void ProtonTransport::simple_vertical_kicker(double L, double VKICK){
   iterators.IncreaseItByOne("VKICKER_it");
   //std::cout << "VKICKER" << iterators.GetIt("VKICKER_it") << std::endl;
-  DoShift(VerticalKicker{iterators.GetIt("VKICKER_it")}, "subtract");
   ApplyStrengthRatio(VerticalKicker{iterators.GetIt("VKICKER_it")}, VKICK);
 
   if (fabs(VKICK) < 1.e-15)
@@ -305,6 +304,7 @@ void ProtonTransport::simple_vertical_kicker(double L, double VKICK){
     simple_drift(L);
     return;
   }
+  DoShift(VerticalKicker{iterators.GetIt("VKICKER_it")}, "subtract");
   z += L;
   x += L*sx;
   y += L*sy + L*0.5*VKICK*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
@@ -326,12 +326,16 @@ void ProtonTransport::SetShift(const Magnet& magnet, const Shift& shift){ //1 qu
 void ProtonTransport::DoShift(const Magnet& m, const string& command) {
   if (magnet_to_shift.find(m) != magnet_to_shift.end()) {
     if (command == "addict") {
-      x += magnet_to_shift.at(m).GetXShift(); 
-      y += magnet_to_shift.at(m).GetYShift(); 
+      x += magnet_to_shift.at(m).GetXShift() + 
+           magnet_to_shift.at(m).GetZShift() * sx; 
+      y += magnet_to_shift.at(m).GetYShift() + 
+           magnet_to_shift.at(m).GetZShift() * sy;
       z += magnet_to_shift.at(m).GetZShift(); 
     } else if (command == "subtract") {
-      x -= magnet_to_shift.at(m).GetXShift(); 
-      y -= magnet_to_shift.at(m).GetYShift(); 
+      x -= magnet_to_shift.at(m).GetXShift() - 
+           magnet_to_shift.at(m).GetZShift() * sx; 
+      y -= magnet_to_shift.at(m).GetYShift() -
+           magnet_to_shift.at(m).GetZShift() * sy;
       z -= magnet_to_shift.at(m).GetZShift(); 
     } else {
       std::cout << "No such command!" << std::endl;
@@ -836,11 +840,6 @@ int main() {
 
       p_shifted->SetProcessedFileName(optics_file_name);
       p_shifted->PrepareBeamline(false);
-
-      std::vector<Magnet> test_magnets = p_shifted->GetMagnets();
-      for (const auto& m : test_magnets) {
-        std::cout << m.GetType() << m.GetId() << std::endl;
-      }
 
       p_shifted->SetShift(magnet, Shift(shift_values[i], 0, 0));
       p_shifted->simple_tracking(205.);
