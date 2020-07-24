@@ -1,20 +1,9 @@
 #include "magnet.h"
 
-const std::map<std::string, int> magnet_name_to_number = {{"dipole(1)", 1}, {"dipole(2)", 2}, 
-                                                          {"quadrupole(1)", 3}, {"quadrupole(2)", 4}, 
-                                                          {"quadrupole(3)", 5}, {"quadrupole(4)", 6},
-                                                          {"quadrupole(5)", 7}, {"quadrupole(6)", 8},
-                                                          {"vertical_kicker(1)", 9}, {"vertical_kicker(2)", 10},
-                                                          {"vertical_kicker(3)", 11}, {"vertical_kicker(4)", 12}, 
-                                                          {"vertical_kicker(5)", 13}, {"horizontal_kicker(1)", 14}, 
-                                                          {"horizontal_kicker(2)", 15}, {"horizontal_kicker(3)", 16}, 
-                                                          {"horizontal_kicker(4)", 17}, {"horizontal_kicker(5)", 18}};
-
 Magnet::Magnet(const std::string& type, int id) 
-  : type(type), id(id) 
+  : type(type), id(id), position(0) 
   {
-    std::string name = type + "(" + std::to_string(id) + ")"; 
-    number = magnet_name_to_number.at(name);
+    name = type + std::to_string(id);
   }
 
   std::string Magnet::GetType() const {
@@ -25,18 +14,26 @@ int Magnet::GetId() const {
   return id;
 }
 
-int Magnet::GetNumber() const {
-  return number;
+void Magnet::SetPosition(double position_) {
+  position = position_;
+} 
+
+double Magnet::GetPosition() const {
+  return position;
+}
+
+std::string Magnet::GetName() const {
+  return name;
 }
 
 Dipole::Dipole(int id) 
-  : Magnet("dipole", id) {}
+  : Magnet("RBEND", id) {}
 
 Quadrupole::Quadrupole(int id) 
-  : Magnet("quadrupole", id) {}
+  : Magnet("QUADRUPOLE", id) {}
 
 VerticalKicker::VerticalKicker(int id) 
-  : Magnet("vertical_kicker", id) {}
+  : Magnet("VKICKER", id) {}
 
 HorizontalKicker::HorizontalKicker(int id) 
-  : Magnet("horizontal_kicker", id) {}
+  : Magnet("HKICKER", id) {}

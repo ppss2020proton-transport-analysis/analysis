@@ -13,12 +13,17 @@ public:
 
   int GetId() const;
 
-  int GetNumber() const;
+  void SetPosition(double);
+
+  double GetPosition() const;
+
+  std::string GetName() const;
 
 private:
-  std::string type = "";
-  int id = 0;
-  int number = 0;
+  std::string type;
+  int id;
+  double position;
+  std::string name;
 };
 
 class Dipole : public Magnet {

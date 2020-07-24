@@ -39,43 +39,34 @@ using std::ifstream;
 using std::istringstream;
 
 bool operator < (Magnet lhs, Magnet rhs) {
-  return lhs.GetNumber() < rhs.GetNumber();
+  return lhs.GetName() < rhs.GetName();
 }
 
 bool operator == (Magnet lhs, Magnet rhs) {
-  if (lhs.GetNumber() == rhs.GetNumber()) {
-    return 1;
-  } else {
-    return 0;
-  }
+  return lhs.GetName() == rhs.GetName();
 }
 
 // 6 quadrupoles, 2 dipoles, 5 horizotal kickers and 5 vertical kickers
 
-struct Iterator {
-  int value;
-  int max_value;
-};
-
 struct MagnetIdIterators {
   void IncreaseItByOne(const std::string& it_name) {
-    if (it_name_to_it.at(it_name).value + 1 > it_name_to_it.at(it_name).max_value) {
-      it_name_to_it.at(it_name).value = 1;
-      return;
-    } else {
-      it_name_to_it.at(it_name).value += 1;
-    } 
+    it_name_to_it.at(it_name) += 1;
   }
 
   int GetIt(const std::string& it_name) {
-    return it_name_to_it.at(it_name).value;
+    return it_name_to_it.at(it_name);
   }
 
+  void ResetAll() {
+    for (auto& [it_name, it] : it_name_to_it) {
+      it = 0;
+    }
+  }
 
-  std::map<std::string, Iterator> it_name_to_it = {{"dipole_it", Iterator{0, 2}},
-                                                   {"quadrupole_it", Iterator{0, 6}}, 
-                                                   {"vertical_kicker_it", Iterator{0, 5}}, 
-                                                   {"horizontal_kicker_it", Iterator{0, 5}}};
+  std::map<std::string, int> it_name_to_it = {{"RBEND_it", 0},
+                                              {"QUADRUPOLE_it", 0}, 
+                                              {"VKICKER_it", 0}, 
+                                              {"HKICKER_it", 0}};
 };
 
 class FileName {
@@ -136,6 +127,8 @@ class ProtonTransport {
     void SetProcessedFileName(const std::string&);
     std::string GetROOTOutputFileName() const;
     void WriteChangesInCsv(const std::string&, DistributionsDifference*, int);
+    void SetPositions();
+    std::vector<Magnet> GetMagnets() const;
   private:
     double IP1Pos;
     double x, y, z, px, py, pz, sx, sy;
@@ -144,6 +137,7 @@ class ProtonTransport {
     std::string processed_filename;
     std::string optics_root_file_name;
     std::map<Magnet, double> magnet_to_ratio;
+    std::map<Magnet, double> magnet_to_position;
     //obj type -diplole quadrupole etc
     //shift obj id 1st 2dn dipole etc ; shift value - self explanatory ;shift axis_axis- x y z strength - condition applied in magnet methods
     // values or vectors- depending if we'll shift 2 things at once - if not values will work
@@ -261,9 +255,9 @@ void ProtonTransport::simple_drift(double L, bool verbose=false){
 }
 
 void ProtonTransport::simple_rectangular_dipole(double L, double K0L){
-  iterators.IncreaseItByOne("dipole_it");
-  DoShift(Dipole{iterators.GetIt("dipole_it")}, "subtract");
-  ApplyStrengthRatio(Dipole{iterators.GetIt("dipole_it")}, K0L);
+  iterators.IncreaseItByOne("RBEND_it");
+  DoShift(Dipole{iterators.GetIt("RBEND_it")}, "subtract");
+  ApplyStrengthRatio(Dipole{iterators.GetIt("RBEND_it")}, K0L);
 
   if (fabs(K0L) < 1.e-15)
   {
@@ -276,13 +270,13 @@ void ProtonTransport::simple_rectangular_dipole(double L, double K0L){
   sx += K0L*beam_energy/pz;
   //sy does not change
 
-  DoShift(Dipole{iterators.GetIt("dipole_it")}, "addict");
+  DoShift(Dipole{iterators.GetIt("RBEND_it")}, "addict");
 }
 
 void ProtonTransport::simple_horizontal_kicker(double L, double HKICK){
-  iterators.IncreaseItByOne("horizontal_kicker_it");
-  DoShift(HorizontalKicker{iterators.GetIt("horizontal_kicker_it")}, "subtract");
-  ApplyStrengthRatio(HorizontalKicker{iterators.GetIt("horizontal_kicker_it")}, HKICK);
+  iterators.IncreaseItByOne("HKICKER_it");
+  DoShift(HorizontalKicker{iterators.GetIt("HKICKER_it")}, "subtract");
+  ApplyStrengthRatio(HorizontalKicker{iterators.GetIt("HKICKER_it")}, HKICK);
 
 
   if (fabs(HKICK) < 1.e-15)
@@ -295,13 +289,13 @@ void ProtonTransport::simple_horizontal_kicker(double L, double HKICK){
   y += L*sy;
   sx += HKICK*beam_energy/pz;
 
-  DoShift(HorizontalKicker{iterators.GetIt("horizontal_kicker_it")}, "addict");
+  DoShift(HorizontalKicker{iterators.GetIt("HKICKER_it")}, "addict");
 }
 
 void ProtonTransport::simple_vertical_kicker(double L, double VKICK){
-  iterators.IncreaseItByOne("vertical_kicker_it");
-  DoShift(VerticalKicker{iterators.GetIt("vertical_kicker_it")}, "subtract");
-  ApplyStrengthRatio(VerticalKicker{iterators.GetIt("vertical_kicker_it")}, VKICK);
+  iterators.IncreaseItByOne("VKICKER_it");
+  DoShift(VerticalKicker{iterators.GetIt("VKICKER_it")}, "subtract");
+  ApplyStrengthRatio(VerticalKicker{iterators.GetIt("VKICKER_it")}, VKICK);
 
   if (fabs(VKICK) < 1.e-15)
   {
@@ -313,12 +307,17 @@ void ProtonTransport::simple_vertical_kicker(double L, double VKICK){
   y += L*sy + L*0.5*VKICK*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
   sy += VKICK*beam_energy/pz;
 
-  DoShift(VerticalKicker{iterators.GetIt("vertical_kicker_it")}, "addict"); 
+  DoShift(VerticalKicker{iterators.GetIt("VKICKER_it")}, "addict"); 
 }
 
 
 void ProtonTransport::SetShift(const Magnet& magnet, const Shift& shift){ //1 quadrupole; id;axis 1x 2y 3z; value
-  magnet_to_shift[magnet] = shift;
+  Magnet magnet_tmp = magnet;
+  magnet_tmp.SetPosition(magnet_to_position.at(magnet));
+
+  std::cout << magnet_tmp.GetPosition() << std::endl;
+
+  magnet_to_shift[magnet_tmp] = shift;
 }
 
 void ProtonTransport::DoShift(const Magnet& m, const string& command) {
@@ -337,8 +336,13 @@ void ProtonTransport::DoShift(const Magnet& m, const string& command) {
   }
 }
 
-void ProtonTransport::SetStrengthRatio(const Magnet& m, double ratio) {
-  magnet_to_ratio[m] = ratio;
+void ProtonTransport::SetStrengthRatio(const Magnet& magnet, double ratio) {
+  Magnet magnet_tmp = magnet;
+  magnet_tmp.SetPosition(magnet_to_position.at(magnet));
+
+  std::cout << magnet_tmp.GetPosition() << std::endl;
+
+  magnet_to_ratio[magnet] = ratio;
 }
 
 void ProtonTransport::ApplyStrengthRatio(const Magnet& m, double& strength) {
@@ -352,8 +356,8 @@ void ProtonTransport::SetProcessedFileName(const std::string& filename) {
 }
 
 void ProtonTransport::simple_quadrupole(double L, double K1L, bool verbose=false){
-  iterators.IncreaseItByOne("quadrupole_it");
-  ApplyStrengthRatio(Quadrupole{iterators.GetIt("quadrupole_it")}, K1L);
+  iterators.IncreaseItByOne("QUADRUPOLE_it");
+  ApplyStrengthRatio(Quadrupole{iterators.GetIt("QUADRUPOLE_it")}, K1L);
 
   if (fabs(K1L) < 1.e-15)
   {
@@ -361,7 +365,7 @@ void ProtonTransport::simple_quadrupole(double L, double K1L, bool verbose=false
     return;
   }
 
-  DoShift(Quadrupole{iterators.GetIt("quadrupole_it")}, "subtract"); 
+  DoShift(Quadrupole{iterators.GetIt("QUADRUPOLE_it")}, "subtract"); 
 
 
 
@@ -401,7 +405,7 @@ void ProtonTransport::simple_quadrupole(double L, double K1L, bool verbose=false
   }
   
 
-  DoShift(Quadrupole{iterators.GetIt("quadrupole_it")}, "addict"); 
+  DoShift(Quadrupole{iterators.GetIt("QUADRUPOLE_it")}, "addict"); 
 
 
 // std::cout<<numb_of_obj_uses<<'\n';
@@ -497,6 +501,39 @@ void ProtonTransport::PrepareBeamline(bool verbose=false){
     element.push_back(sorted_param);
     
   }
+
+  SetPositions();
+}
+
+void ProtonTransport::SetPositions() {
+  if (element.empty()) {
+    std::cout << "Use PrepareBeamline() first!" << std::endl;
+    return;
+  }
+  for (const auto& el : element) {
+    if (stod(el[1]) > 205.) break;
+    if (el[0] == "\"QUADRUPOLE\"") {
+      iterators.IncreaseItByOne("QUADRUPOLE_it");
+      magnet_to_position[Quadrupole(iterators.GetIt("QUADRUPOLE_it"))] = stod(el[1]);
+    } else if (el[0] == "\"RBEND\"") {
+      iterators.IncreaseItByOne("RBEND_it");
+      magnet_to_position[Dipole(iterators.GetIt("RBEND_it"))] = stod(el[1]);
+    } else if (el[0] == "\"VKICKER\"") {
+      iterators.IncreaseItByOne("VKICKER_it");
+      magnet_to_position[VerticalKicker(iterators.GetIt("VKICKER_it"))] = stod(el[1]);
+    } else if (el[0] == "\"HKICKER\"") {
+      iterators.IncreaseItByOne("HKICKER_it");
+      magnet_to_position[HorizontalKicker(iterators.GetIt("HKICKER_it"))] = stod(el[1]);
+    }
+  }
+}
+
+std::vector<Magnet> ProtonTransport::GetMagnets() const {
+  std::vector<Magnet> result;
+  for (const auto& [magnet, pos] : magnet_to_position) {
+    result.push_back(magnet);
+  }
+  return result;
 }
 
 void ProtonTransport::simple_tracking(double obs_point){
@@ -567,7 +604,7 @@ void ProtonTransport::simple_tracking(double obs_point){
   
   for (int evt=0; evt<nevents; evt++)
   {
-    iterators = {};
+    iterators.ResetAll();
     ntuple->GetEntry(evt);
 
 //  for (double E=6500.; E<=1.00001*7000.; E += 100.)
@@ -720,7 +757,7 @@ void ProtonTransport::WriteChangesInCsv(const std::string& filename, Distributio
   int local_run_id = 1;
   if (!magnet_to_shift.empty()) {
     for (const auto& [magnet, shift] : magnet_to_shift) {
-      f << run_id << "_" << magnet.GetNumber() 
+      f << run_id << "_" << local_run_id 
         << "," << magnet.GetType() << "(" << magnet.GetId() << ")," 
         << shift.GetXShift() << "," << shift.GetYShift() << "," 
         << shift.GetZShift() << ","; 
@@ -732,31 +769,31 @@ void ProtonTransport::WriteChangesInCsv(const std::string& filename, Distributio
       }
 
       if (local_run_id == 1) {
-        ++local_run_id;
         for (const auto& [var_name, rms] : var_name_to_rms) {
           f << "," << rms << "," << var_name_to_mean.at(var_name);
         }
       } else {
         f << ",,,,,,,,,,,,,,";
       }
+      ++local_run_id;
       f << "\n";
     }
   } else if (!magnet_to_ratio.empty()) {
     for (const auto& [magnet, ratio] : magnet_to_ratio) {
-      f << run_id << "." << magnet.GetNumber() 
+      f << run_id << "." << local_run_id 
         << "," << magnet.GetType() << "(" << magnet.GetId() << ")," 
         << 0 << "," << 0 << "," << 0 << ","; 
 
       f <<  ratio;
 
       if (local_run_id == 1) {
-        ++local_run_id;
         for (const auto& [var_name, rms] : var_name_to_rms) {
           f << "," << rms << "," << var_name_to_mean.at(var_name);
         }
       } else {
         f << ",,,,,,,,,,,,,,";
       }
+      ++local_run_id;
       f << "\n";
     }
   }
@@ -766,20 +803,19 @@ void ProtonTransport::WriteChangesInCsv(const std::string& filename, Distributio
 
 int main() {
   std::string optics_file_name = "optics_PPSS_2020/alfaTwiss1.txt_beta40cm_6500GeV_y-185murad";
-  std::string changes_x_shifting_fn = "changes_x_shifting.csv";
-  std::string changes_y_shifting_fn = "changes_y_shifting.csv";
+  std::string changes_x_shifting_fn = "x_shift.csv";
+  std::string changes_y_shifting_fn = "y_shift.csv";
 
   double strength_ratios[] = {0.95, 0.99, 0.995, 0.999, 1.001, 1.005, 1.01, 1.05};
   double shift_values[] = {-0.0005, -0.0002, -0.0001, 0.0001, 0.0002, 0.0005};
-  std::vector<Magnet> magnets = {Dipole(1), Dipole(2), Quadrupole(1), 
-                                 Quadrupole(2), Quadrupole(3), Quadrupole(4), 
-                                 Quadrupole(5), Quadrupole(6)};
 
   ProtonTransport* p_default = new ProtonTransport;
 
   p_default->SetProcessedFileName(optics_file_name);
   p_default->PrepareBeamline(false);
   p_default->simple_tracking(205.);
+
+  std::vector<Magnet> magnets = p_default->GetMagnets();
 
   remove(changes_x_shifting_fn.c_str());
   remove(changes_y_shifting_fn.c_str());
@@ -795,6 +831,12 @@ int main() {
 
       p_shifted->SetProcessedFileName(optics_file_name);
       p_shifted->PrepareBeamline(false);
+
+      std::vector<Magnet> test_magnets = p_shifted->GetMagnets();
+      for (const auto& m : test_magnets) {
+        std::cout << m.GetType() << m.GetId() << std::endl;
+      }
+
       p_shifted->SetShift(magnet, Shift(shift_values[i], 0, 0));
       p_shifted->simple_tracking(205.);
 
