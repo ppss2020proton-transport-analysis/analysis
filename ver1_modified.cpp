@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #include <TFile.h>
+#include <TRandom.h>
 #include <TSystem.h>
 #include <TH1F.h>
 #include <TTree.h>
@@ -39,11 +40,6 @@ using std::ifstream;
 using std::istringstream;
 
 double ApplyOperation(double lvalue, double rvalue, const std::string& op) {
-  if (rvalue == 0) {
-    if (op != "*") return lvalue;
-    else return 0;
-  }
-
   if (op == "+") {
     return lvalue + rvalue;
   } else if (op == "-") {
@@ -51,7 +47,6 @@ double ApplyOperation(double lvalue, double rvalue, const std::string& op) {
   } else if (op == "*") {
     return lvalue * rvalue;
   } 
-  
   return 0;
 }
 
@@ -332,15 +327,17 @@ void ProtonTransport::SetShift(const Magnet& magnet, const Shift& shift){ //1 qu
 
 void ProtonTransport::DoShift(const Magnet& m, const string& op) {
   if (magnet_to_shift.find(m) != magnet_to_shift.end()) {
-    double dx = ApplyOperation(magnet_to_shift.at(m).GetXShift(), 
-                               ApplyOperation(sx, magnet_to_shift.at(m).GetZShift(), "*"), 
-                               "+");
-    double dy = ApplyOperation(magnet_to_shift.at(m).GetYShift(), 
-                               ApplyOperation(sy, magnet_to_shift.at(m).GetZShift(), "*"), 
-                               "+");
-    x = ApplyOperation(x, dx, op);
-    y = ApplyOperation(y, dy, op);
-    z = ApplyOperation(z, magnet_to_shift.at(m).GetZShift(), op);
+    if (magnet_to_shift.at(m).GetXShift() != 0) x = ApplyOperation(x, magnet_to_shift.at(m).GetXShift(), op);
+    if (magnet_to_shift.at(m).GetYShift() != 0) y = ApplyOperation(y, magnet_to_shift.at(m).GetYShift(), op);
+    if (magnet_to_shift.at(m).GetZShift() != 0) {
+      z = ApplyOperation(z, magnet_to_shift.at(m).GetZShift(), op);
+      x = ApplyOperation(x, 
+                         ApplyOperation(sx, magnet_to_shift.at(m).GetZShift(), "*"), 
+                         "+");
+      y = ApplyOperation(y, 
+                         ApplyOperation(sy, magnet_to_shift.at(m).GetZShift(), "*"), 
+                         "+");
+    }
   }
 }
 
@@ -783,23 +780,27 @@ void ProtonTransport::WriteChangesInCsv(const std::string& filename, Distributio
       ++local_run_id;
       f << "\n";
     }
-  } else if (!magnet_to_ratio.empty()) {
+  }
+  
+  if (!magnet_to_ratio.empty()) {
     for (const auto& [magnet, ratio] : magnet_to_ratio) {
-      f << run_id << "_" << local_run_id << "," 
-        << magnet.GetName() << "," 
-        << magnet.GetPosition() << "," << 0 << "," << 0 << "," << 0 << ","; 
+      if (magnet_to_shift.find(magnet) == magnet_to_shift.end()) {
+        f << run_id << "_" << local_run_id << "," 
+          << magnet.GetName() << "," 
+          << magnet.GetPosition() << "," << 0 << "," << 0 << "," << 0 << ","; 
 
-      f << ratio;
+        f << ratio;
 
-      if (local_run_id == 1) {
-        for (const auto& [var_name, rms] : var_name_to_rms) {
-          f << "," << rms << "," << var_name_to_mean.at(var_name);
+        if (local_run_id == 1) {
+          for (const auto& [var_name, rms] : var_name_to_rms) {
+            f << "," << rms << "," << var_name_to_mean.at(var_name);
+          }
+        } else {
+          f << ",,,,,,,,,,,,,,";
         }
-      } else {
-        f << ",,,,,,,,,,,,,,";
+        ++local_run_id;
+        f << "\n";
       }
-      ++local_run_id;
-      f << "\n";
     }
   }
   
@@ -808,11 +809,7 @@ void ProtonTransport::WriteChangesInCsv(const std::string& filename, Distributio
 
 int main() {
   std::string optics_file_name = "optics_PPSS_2020/alfaTwiss1.txt_beta40cm_6500GeV_y-185murad";
-  std::string changes_x_shifting_fn = "x_shift.csv";
-  std::string changes_y_shifting_fn = "y_shift.csv";
-
-  double strength_ratios[] = {0.95, 0.99, 0.995, 0.999, 1.001, 1.005, 1.01, 1.05};
-  double shift_values[] = {-0.0005, -0.0002, -0.0001, 0.0001, 0.0002, 0.0005};
+  std::string changes_fn = "multiple_changes.csv";
 
   ProtonTransport* p_default = new ProtonTransport;
 
@@ -822,100 +819,37 @@ int main() {
 
   std::vector<Magnet> magnets = p_default->GetMagnets();
 
-  remove(changes_x_shifting_fn.c_str());
-  remove(changes_y_shifting_fn.c_str());
+  remove(changes_fn.c_str());
 
   int run_id_x_shifting = 1;
   int run_id_y_shifting = 1;
-  for (int i = 0; i < sizeof(shift_values)/sizeof(shift_values[0]); i++) {
-    for (const auto& magnet : magnets) {
-      std::cout << "Run: " << run_id_x_shifting << ",\t Magnet: " 
-                << magnet.GetName() << " (" << magnet.GetPosition() << ")" 
-                << ",\t x_shift =  " << shift_values[i] << std::endl;
-      ProtonTransport* p_shifted = new ProtonTransport;
+  TRandom* r = new TRandom();
+  for (int i = 0; i < 50; i++) {
+    std::cout << "Run: " << run_id_x_shifting << std::endl;
 
-      p_shifted->SetProcessedFileName(optics_file_name);
-      p_shifted->PrepareBeamline(false);
-
-      p_shifted->SetShift(magnet, Shift(shift_values[i], 0, 0));
-      p_shifted->simple_tracking(205.);
-
-      DistributionsDifference* diff = new DistributionsDifference(p_default->GetROOTOutputFileName(), 
-                                                                  p_shifted->GetROOTOutputFileName());
-      p_shifted->WriteChangesInCsv(changes_x_shifting_fn, diff, run_id_x_shifting++);
-
-      std::cout << "done\n\n"; 
-
-      delete p_shifted;
-    }
+    ProtonTransport* p = new ProtonTransport;
+    p->SetProcessedFileName(optics_file_name);
+    p->PrepareBeamline(false);
 
     for (const auto& magnet : magnets) {
-      std::cout << "Run: " << run_id_y_shifting << ",\t Magnet: " 
-                << magnet.GetName() << " (" << magnet.GetPosition() << ")" 
-                << ",\t y_shift =  " << shift_values[i] << std::endl;
-      ProtonTransport* p_shifted = new ProtonTransport;
-
-      p_shifted->SetProcessedFileName(optics_file_name);
-      p_shifted->PrepareBeamline(false);
-      p_shifted->SetShift(magnet, Shift(0, shift_values[i], 0));
-      p_shifted->simple_tracking(205.);
-
-      DistributionsDifference* diff = new DistributionsDifference(p_default->GetROOTOutputFileName(), 
-                                                                  p_shifted->GetROOTOutputFileName());
-      p_shifted->WriteChangesInCsv(changes_y_shifting_fn, diff, run_id_y_shifting++);
-
-      std::cout << "done\n\n"; 
-
-      delete p_shifted;
+      if (magnet.GetType() == "QUADRUPOLE") {
+        p->SetShift(magnet, Shift(r->Gaus(0, 0.00025), 
+                                  r->Gaus(0, 0.00025), 
+                                  r->Gaus(0, 0.001)));
+      }
+      p->SetStrengthRatio(magnet, 1. - r->Gaus(0, 0.005));
     }
+
+    p->simple_tracking(205.);
+
+    DistributionsDifference* diff = new DistributionsDifference(p_default->GetROOTOutputFileName(), 
+                                                                p->GetROOTOutputFileName());
+    p->WriteChangesInCsv(changes_fn, diff, run_id_x_shifting++);
+
+    std::cout << "done\n\n"; 
+    delete p;
   }
   delete p_default;
-
-  //for (int i = 0; i < sizeof(strength_ratios)/sizeof(strength_ratios[0]); i++) {
-  //  ProtonTransport* p_ratio = new ProtonTransport;
-
-  //  p_ratio->SetProcessedFileName(optics_file_name);
-  //  p_ratio->PrepareBeamline(false);
-  //  p_ratio->SetStrengthRatio(Quadrupole(1), strength_ratios[i]);
-  //  p_ratio->simple_tracking(205.);
-
-  //  DistributionsDifference* diff = new DistributionsDifference(p_default->GetROOTOutputFileName(), 
-  //                                                              p_ratio->GetROOTOutputFileName());
-  //  p_ratio->WriteChangesInCsv(changes_x_shifting_fn, diff, run_id++);
-
-  //  delete p_ratio;
-  //}
-
-
-  //char path_to_optic_files[] = "optics_PPSS_2020/";
-  //TSystemDirectory* dir = new TSystemDirectory(path_to_optic_files, path_to_optic_files);
-  //TList* list_of_files = dir->GetListOfFiles();
-
-  //if (list_of_files) {
-  //  TSystemFile* file;
-  //  TString fname;
-  //  TIter next(list_of_files);
-
-  //  while (file=(TSystemFile*)next()) {
-  //    fname = file->GetName();
-  //    if (!file->IsDirectory() && fname.BeginsWith("alfaTwiss")) {
-  //      ProtonTransport* p_default = new ProtonTransport;
-  //      ProtonTransport* p_shifted = new ProtonTransport;
-
-  //      std::string fname_str = string(path_to_optic_files) + string(fname.Data());
-  //      std::cout << "Processing fie: " << fname_str << std::endl;
-
-  //      p_default->PrepareBeamline(fname_str, false);
-  //      p_default->simple_tracking(205., fname_str);
-
-  //      p_shifted->PrepareBeamline(fname_str, false);
-  //      p_shifted->SetShift(Dipole{1}, Shift{0.0005, 0, 0});
-  //      p_shifted->simple_tracking(205., fname_str);
-
-  //      delete p_default, p_shifted;
-  //    }
-  //  }
-  //}
 
   return 0;
 }
