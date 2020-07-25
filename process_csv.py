@@ -21,13 +21,12 @@ def plot_diffs(filename, shift_axis):
     y_errs_names = [i for i in y_vals if "RMS" in i]
 
     # Different color for each magnet
-    colors = ["cyan", "green", "violet", "blue", "black", "yellow", "grey",
-              "orange", "magenta", "lime", "brown", "deepskyblue"]
+    colors = ["cyan", "green", "orange", "blue", "black", "brown", "grey",
+              "violet", "magenta", "lime", "yellow", "deepskyblue"]
     df = df.loc[(df.iloc[:,7:] != 0).any(axis=1)]
     magnets = df["Magnet"].unique()
     
     magnets_to_colors = dict(zip(magnets, colors))
-    print(magnets_to_colors)
     
     for i in range(len(y_vals_names)):
         plt.figure(figsize=(16,9))

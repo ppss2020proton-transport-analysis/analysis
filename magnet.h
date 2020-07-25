@@ -7,7 +7,7 @@
 
 class Magnet {
 public:
-  Magnet(const std::string&, int);
+  Magnet(const std::string&, int, double);
 
   std::string GetType() const;
 
@@ -28,22 +28,22 @@ private:
 
 class Dipole : public Magnet {
 public:
-  Dipole(int);
+  Dipole(int, double);
 };
 
 class Quadrupole : public Magnet {
 public:
-  Quadrupole(int);
+  Quadrupole(int, double);
 };
 
 class VerticalKicker : public Magnet {
 public:
-  VerticalKicker(int);
+  VerticalKicker(int, double);
 };
 
 class HorizontalKicker : public Magnet {
 public:
-  HorizontalKicker(int);
+  HorizontalKicker(int, double);
 };
 
 #endif
