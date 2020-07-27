@@ -133,6 +133,7 @@ class ProtonTransport {
     void SetProcessedFileName(const std::string&);
     std::string GetROOTOutputFileName() const;
     void WriteChangesInCsv(const std::string&, DistributionsDifference*, int);
+    void WriteLostProtonsInCsv(const std::string&) const;
     void SetPositions();
     std::vector<Magnet> GetMagnets() const;
     void SetMagnets(const std::vector<Magnet>&); 
@@ -288,6 +289,8 @@ void ProtonTransport::simple_rectangular_dipole(double L, double K0L, double rec
     y = y0;
     z = z0;
     sx = sx0;
+  } else {
+    lost_protons.push_back(std::vector<double>{px, py, pz});
   }
 
   DoShift(Dipole(iterators.GetIt("RBEND_it"), 0), "+");
@@ -318,6 +321,8 @@ void ProtonTransport::simple_horizontal_kicker(double L, double HKICK, double re
     y = y0;
     z = z0;
     sx = sx0;
+  } else {
+    lost_protons.push_back(std::vector<double>{px, py, pz});
   }
 
   DoShift(HorizontalKicker(iterators.GetIt("HKICKER_it"), 0), "+");
@@ -347,6 +352,8 @@ void ProtonTransport::simple_vertical_kicker(double L, double VKICK, double rect
     y = y0;
     z = z0;
     sy = sy0;
+  } else {
+    lost_protons.push_back(std::vector<double>{px, py, pz});
   }
 
   DoShift(VerticalKicker(iterators.GetIt("VKICKER_it"), 0), "+"); 
@@ -446,6 +453,8 @@ void ProtonTransport::simple_quadrupole(double L, double K1L, double rect_x, dou
     z = z0;
     sx = sx0;
     sy = sy0;
+  } else {
+    lost_protons.push_back(std::vector<double>{px, py, pz});
   }
   
 
@@ -688,10 +697,6 @@ void ProtonTransport::simple_tracking(double obs_point){
   bool Observe = false, Observed = false;
   for (unsigned int a=0; a<element.size(); a++)
   {  
-    if (isLost(element[a])) {
-      ++num_of_lost_protons;
-      continue;
-    }
     if (fabs(z+stod(element[a].at(2)) - obs_point) < 1.e-3 && !Observe && !Observed) {Observed = true; Observe = true;}
     else Observe = false;
     if ((element[a].at(0)).compare("\"MARKER\"") == 0) ProtonTransport::Marker(Observe); //Marker(true) will return proton x, y, z, px, py, pz at position of marker
@@ -804,6 +809,21 @@ void ProtonTransport::simple_tracking(double obs_point){
 
 std::string ProtonTransport::GetROOTOutputFileName() const {
   return optics_root_file_name;
+}
+
+void ProtonTransport::WriteLostProtonsInCsv(const std::string& filename) const {
+  std::ofstrem f;
+  f.open(filename, std::fstream::app);
+
+  f << "No," << "px," << "py," << "pz\n";
+
+  for (int i = 0; i < lost_protons.size(); i++) {
+    f << i << "," << lost_protons[i][0] 
+      << "," << lost_protons[i][1] << "," 
+      << lost_protons[i][2] << "\n";
+  }
+
+  f.close();
 }
 
 void ProtonTransport::WriteChangesInCsv(const std::string& filename, DistributionsDifference* diff, int run_id) {
