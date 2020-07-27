@@ -136,6 +136,7 @@ class ProtonTransport {
     void SetPositions();
     std::vector<Magnet> GetMagnets() const;
     void SetMagnets(const std::vector<Magnet>&); 
+    bool isLost(double, double, double, double, double, double);
   private:
     double IP1Pos;
     double x, y, z, px, py, pz, sx, sy;
@@ -145,6 +146,7 @@ class ProtonTransport {
     std::string optics_root_file_name;
     std::map<Magnet, double> magnet_to_ratio;
     std::vector<Magnet> magnets;
+    std::vector<std::vector<double>> lost_protons;
     //obj type -diplole quadrupole etc
     //shift obj id 1st 2dn dipole etc ; shift value - self explanatory ;shift axis_axis- x y z strength - condition applied in magnet methods
     // values or vectors- depending if we'll shift 2 things at once - if not values will work
@@ -154,10 +156,10 @@ class ProtonTransport {
     double BeampipeSeparation;
     void Marker(bool);
     void simple_drift(double, bool);
-    void simple_rectangular_dipole(double, double);
-    void simple_horizontal_kicker(double, double);
-    void simple_vertical_kicker(double, double);
-    void simple_quadrupole(double, double, bool);
+    void simple_rectangular_dipole(double, double, double, double, double, double);
+    void simple_horizontal_kicker(double, double, double, double, double, double);
+    void simple_vertical_kicker(double, double, double, double, double, double);
+    void simple_quadrupole(double, double, double, double, double, double, bool);
     vector <vector <string> > element;
     bool DoApertureCut;
 };
@@ -261,7 +263,7 @@ void ProtonTransport::simple_drift(double L, bool verbose=false){
   cout << "\tsy: " << sy << endl;
 }
 
-void ProtonTransport::simple_rectangular_dipole(double L, double K0L){
+void ProtonTransport::simple_rectangular_dipole(double L, double K0L, double rect_x, double rect_y, double el_x, double el_y){
   iterators.IncreaseItByOne("RBEND_it");
   //std::cout << "DIP" << iterators.GetIt("RBEND_it") << std::endl;
   ApplyStrengthRatio(Dipole(iterators.GetIt("RBEND_it"), 0), K0L);
@@ -272,16 +274,26 @@ void ProtonTransport::simple_rectangular_dipole(double L, double K0L){
     return;
   }
   DoShift(Dipole(iterators.GetIt("RBEND_it"), 0), "-");
-  z += L;
-  x += L*sx + L*0.5*K0L*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
-  y += L*sy;
-  sx += K0L*beam_energy/pz;
+  double x0 = x;
+  double y0 = y;
+  double z0 = z;
+  double sx0 = sx;
+  z0 += L;
+  x0 += L*sx + L*0.5*K0L*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
+  y0 += L*sy;
+  sx0 += K0L*beam_energy/pz;
   //sy does not change
+  if (!isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
+    x = x0;
+    y = y0;
+    z = z0;
+    sx = sx0;
+  }
 
   DoShift(Dipole(iterators.GetIt("RBEND_it"), 0), "+");
 }
 
-void ProtonTransport::simple_horizontal_kicker(double L, double HKICK){
+void ProtonTransport::simple_horizontal_kicker(double L, double HKICK, double rect_x, double rect_y, double el_x, double el_y){
   iterators.IncreaseItByOne("HKICKER_it");
   //std::cout << "HKICKER" << iterators.GetIt("HKICKER_it") << std::endl;
   ApplyStrengthRatio(HorizontalKicker(iterators.GetIt("HKICKER_it"), 0), HKICK);
@@ -293,15 +305,25 @@ void ProtonTransport::simple_horizontal_kicker(double L, double HKICK){
     return;
   }
   DoShift(HorizontalKicker(iterators.GetIt("HKICKER_it"), 0), "-");
-  z += L;
-  x += L*sx + L*0.5*HKICK*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
-  y += L*sy;
-  sx += HKICK*beam_energy/pz;
+  double x0 = x;
+  double y0 = y;
+  double z0 = z;
+  double sx0 = sx;
+  z0 += L;
+  x0 += L*sx + L*0.5*HKICK*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
+  y0 += L*sy;
+  sx0 += HKICK*beam_energy/pz;
+  if (!isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
+    x = x0;
+    y = y0;
+    z = z0;
+    sx = sx0;
+  }
 
   DoShift(HorizontalKicker(iterators.GetIt("HKICKER_it"), 0), "+");
 }
 
-void ProtonTransport::simple_vertical_kicker(double L, double VKICK){
+void ProtonTransport::simple_vertical_kicker(double L, double VKICK, double rect_x, double rect_y, double el_x, double el_y){
   iterators.IncreaseItByOne("VKICKER_it");
   //std::cout << "VKICKER" << iterators.GetIt("VKICKER_it") << std::endl;
   ApplyStrengthRatio(VerticalKicker(iterators.GetIt("VKICKER_it"), 0), VKICK);
@@ -312,10 +334,20 @@ void ProtonTransport::simple_vertical_kicker(double L, double VKICK){
     return;
   }
   DoShift(VerticalKicker(iterators.GetIt("VKICKER_it"), 0), "-");
-  z += L;
-  x += L*sx;
-  y += L*sy + L*0.5*VKICK*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
-  sy += VKICK*beam_energy/pz;
+  double x0 = x;
+  double y0 = y;
+  double z0 = z;
+  double sy0 = sy;
+  z0 += L;
+  x0 += L*sx;
+  y0 += L*sy + L*0.5*VKICK*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
+  sy0 += VKICK*beam_energy/pz;
+  if (!isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
+    x = x0;
+    y = y0;
+    z = z0;
+    sy = sy0;
+  }
 
   DoShift(VerticalKicker(iterators.GetIt("VKICKER_it"), 0), "+"); 
 }
@@ -355,7 +387,7 @@ void ProtonTransport::SetProcessedFileName(const std::string& filename) {
   processed_filename = filename;
 }
 
-void ProtonTransport::simple_quadrupole(double L, double K1L, bool verbose=false){
+void ProtonTransport::simple_quadrupole(double L, double K1L, double rect_x, double rect_y, double el_x, double el_y, bool verbose=false){
   iterators.IncreaseItByOne("QUADRUPOLE_it");
   //std::cout << "Q" << iterators.GetIt("QUADRUPOLE_it") << std::endl;
   ApplyStrengthRatio(Quadrupole(iterators.GetIt("QUADRUPOLE_it"), 0), K1L);
@@ -368,41 +400,52 @@ void ProtonTransport::simple_quadrupole(double L, double K1L, bool verbose=false
 
   DoShift(Quadrupole(iterators.GetIt("QUADRUPOLE_it"), 0), "-"); 
 
+  double x0 = x;
+  double y0 = y;
+  double z0 = z;
+  double sx0 = sx;
+  double sy0 = sy;
 
-
-  z += L;
+  z0 += L;
   double qk  = sqrt((fabs(K1L) * beam_energy)/(pz * L));
   double qkl = qk * L;
-  double x_tmp = x;
-  double y_tmp = y;
+  double x_tmp = x0;
+  double y_tmp = y0;
 
   if (K1L >= 0.) //horizontal focussing
   {
-    fabs(x)  > 1.e-15 ? x =  cos(qkl) * x       : x = 0.;
-    fabs(sx) > 1.e-15 ? x += sin(qkl) * sx / qk : x += 0.;
+    fabs(x0)  > 1.e-15 ? x0 =  cos(qkl) * x0       : x0 = 0.;
+    fabs(sx0) > 1.e-15 ? x0 += sin(qkl) * sx0 / qk : x0 += 0.;
 
-    fabs(y)  > 1.e-15 ? y = cosh(qkl) * y        : y = 0.;
-    fabs(sy) > 1.e-15 ? y += sinh(qkl) * sy / qk : y += 0.;
+    fabs(y0)  > 1.e-15 ? y0 = cosh(qkl) * y0        : y0 = 0.;
+    fabs(sy0) > 1.e-15 ? y0 += sinh(qkl) * sy0 / qk : y0 += 0.;
 
-    fabs(sx) > 1.e-15 ? sx = cos(qkl) * sx           : sx = 0.;
-    fabs(x_tmp)  > 1.e-15 ? sx += -qk * sin(qkl) * x_tmp : sx += 0.;
+    fabs(sx0) > 1.e-15 ? sx0 = cos(qkl) * sx0           : sx0 = 0.;
+    fabs(x_tmp)  > 1.e-15 ? sx0 += -qk * sin(qkl) * x_tmp : sx0 += 0.;
 
-    fabs(sy) > 1.e-15 ? sy = cosh(qkl) * sy          : sy = 0.;
-    fabs(y_tmp)  > 1.e-15 ? sy += qk * sinh(qkl) * y_tmp : sy += 0.;
+    fabs(sy0) > 1.e-15 ? sy0 = cosh(qkl) * sy0          : sy0 = 0.;
+    fabs(y_tmp)  > 1.e-15 ? sy0 += qk * sinh(qkl) * y_tmp : sy0 += 0.;
   }
   else //vertical focussing
   {
-    fabs(y)  > 1.e-15 ? y =  cos(qkl) * y       : y = 0.;
-    fabs(sy) > 1.e-15 ? y += sin(qkl) * sy / qk : y += 0.;
+    fabs(y0)  > 1.e-15 ? y0 =  cos(qkl) * y0       : y0 = 0.;
+    fabs(sy0) > 1.e-15 ? y0 += sin(qkl) * sy / qk : y0 += 0.;
 
-    fabs(x)  > 1.e-15 ? x = cosh(qkl) * x        : x = 0.;
-    fabs(sx) > 1.e-15 ? x += sinh(qkl) * sx / qk : x += 0.;
+    fabs(x0)  > 1.e-15 ? x0 = cosh(qkl) * x0        : x0 = 0.;
+    fabs(sx0) > 1.e-15 ? x0 += sinh(qkl) * sx0 / qk : x0 += 0.;
 
-    fabs(sy) > 1.e-15 ? sy = cos(qkl) * sy           : sy = 0.;
-    fabs(y_tmp)  > 1.e-15 ? sy += -qk * sin(qkl) * y_tmp : sy += 0.;
+    fabs(sy0) > 1.e-15 ? sy0 = cos(qkl) * sy0           : sy0 = 0.;
+    fabs(y_tmp)  > 1.e-15 ? sy0 += -qk * sin(qkl) * y_tmp : sy0 += 0.;
 
-    fabs(sx) > 1.e-15 ? sx = cosh(qkl) * sx          : sx = 0.;
-    fabs(x_tmp)  > 1.e-15 ? sx += qk * sinh(qkl) * x_tmp : sx += 0.;
+    fabs(sx0) > 1.e-15 ? sx0 = cosh(qkl) * sx0          : sx0 = 0.;
+    fabs(x_tmp)  > 1.e-15 ? sx0 += qk * sinh(qkl) * x_tmp : sx0 += 0.;
+  }
+  if (!isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
+    x = x0;
+    y = y0;
+    z = z0;
+    sx = sx0;
+    sy = sy0;
   }
   
 
@@ -537,6 +580,14 @@ void ProtonTransport::SetMagnets(const std::vector<Magnet>& magnets_) {
   magnets  = magnets_;
 }
 
+bool ProtonTransport::isLost(double x0, double y0, double rect_x, double rect_y, double el_x, double el_y) {
+  if ((x0*x0/el_x + y0*y0/el_y > 1) || (x0 > rect_x) || (y0 > rect_y)) {
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
 void ProtonTransport::simple_tracking(double obs_point){
 
   int m_process_code;
@@ -637,14 +688,32 @@ void ProtonTransport::simple_tracking(double obs_point){
   bool Observe = false, Observed = false;
   for (unsigned int a=0; a<element.size(); a++)
   {  
+    if (isLost(element[a])) {
+      ++num_of_lost_protons;
+      continue;
+    }
     if (fabs(z+stod(element[a].at(2)) - obs_point) < 1.e-3 && !Observe && !Observed) {Observed = true; Observe = true;}
     else Observe = false;
     if ((element[a].at(0)).compare("\"MARKER\"") == 0) ProtonTransport::Marker(Observe); //Marker(true) will return proton x, y, z, px, py, pz at position of marker
-    else if ((element[a].at(0)).compare("\"DRIFT\"") == 0) ProtonTransport::simple_drift(stod(element[a].at(2)), Observe); // L
-    else if ((element[a].at(0)).compare("\"RBEND\"") == 0) ProtonTransport::simple_rectangular_dipole(stod(element[a].at(2)), stod(element[a].at(5))); //L, K0L
-    else if ((element[a].at(0)).compare("\"HKICKER\"") == 0) ProtonTransport::simple_horizontal_kicker(stod(element[a].at(2)), stod(element[a].at(3))); //L, HKICK
-    else if ((element[a].at(0)).compare("\"VKICKER\"") == 0) ProtonTransport::simple_vertical_kicker(stod(element[a].at(2)), stod(element[a].at(4))); //L, VKICK
-    else if ((element[a].at(0)).compare("\"QUADRUPOLE\"") == 0) ProtonTransport::simple_quadrupole(stod(element[a].at(2)), stod(element[a].at(6)), Observe); //L, K1L 
+    else if ((element[a].at(0)).compare("\"DRIFT\"") == 0) {
+      ProtonTransport::simple_drift(stod(element[a].at(2)), Observe); // L
+    }
+    else if ((element[a].at(0)).compare("\"RBEND\"") == 0) { 
+      ProtonTransport::simple_rectangular_dipole(stod(element[a].at(2)), stod(element[a].at(5)), 
+                                                 stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13))); //L, K0L
+    }  
+    else if ((element[a].at(0)).compare("\"HKICKER\"") == 0) { 
+      ProtonTransport::simple_horizontal_kicker(stod(element[a].at(2)), stod(element[a].at(3)),
+                                                stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13))); //L, HKICK
+    }
+    else if ((element[a].at(0)).compare("\"VKICKER\"") == 0) { 
+      ProtonTransport::simple_vertical_kicker(stod(element[a].at(2)), stod(element[a].at(4)),
+                                              stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13))); //L, VKICK
+    }
+    else if ((element[a].at(0)).compare("\"QUADRUPOLE\"") == 0) { 
+      ProtonTransport::simple_quadrupole(stod(element[a].at(2)), stod(element[a].at(6)),
+                                         stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13)), Observe); //L, K1L 
+    }
     else if ((element[a].at(0)).compare("\"MULTIPOLE\"") == 0)
     {
       if ( fabs(stod(element[a].at(5))) > 1.e-10 )
@@ -809,7 +878,7 @@ void ProtonTransport::WriteChangesInCsv(const std::string& filename, Distributio
 
 int main() {
   std::string optics_file_name = "optics_PPSS_2020/alfaTwiss1.txt_beta40cm_6500GeV_y-185murad";
-  std::string changes_fn = "multiple_changes.csv";
+  std::string changes_fn = "HKICKER_variants.csv";
 
   ProtonTransport* p_default = new ProtonTransport;
 
@@ -821,30 +890,31 @@ int main() {
 
   remove(changes_fn.c_str());
 
-  int run_id_x_shifting = 1;
-  int run_id_y_shifting = 1;
+  int run_id = 1;
   TRandom* r = new TRandom();
-  for (int i = 0; i < 50; i++) {
-    std::cout << "Run: " << run_id_x_shifting << std::endl;
+  for (int i = 0; i < 100; i++) {
+    std::cout << "Run: " << run_id 
+              << ", Changes fn: " << changes_fn 
+              << std::endl;
 
     ProtonTransport* p = new ProtonTransport;
     p->SetProcessedFileName(optics_file_name);
     p->PrepareBeamline(false);
 
     for (const auto& magnet : magnets) {
-      if (magnet.GetType() == "QUADRUPOLE") {
+      if (magnet.GetType() == "HKICKER") {
         p->SetShift(magnet, Shift(r->Gaus(0, 0.00025), 
                                   r->Gaus(0, 0.00025), 
                                   r->Gaus(0, 0.001)));
+        p->SetStrengthRatio(magnet, 1. - r->Gaus(0, 0.005));
       }
-      p->SetStrengthRatio(magnet, 1. - r->Gaus(0, 0.005));
     }
 
     p->simple_tracking(205.);
 
     DistributionsDifference* diff = new DistributionsDifference(p_default->GetROOTOutputFileName(), 
                                                                 p->GetROOTOutputFileName());
-    p->WriteChangesInCsv(changes_fn, diff, run_id_x_shifting++);
+    p->WriteChangesInCsv(changes_fn, diff, run_id++);
 
     std::cout << "done\n\n"; 
     delete p;
