@@ -15,7 +15,6 @@
 #include <TROOT.h>
 
 using VarNameToHist = std::map<std::string, TH1F*>;
-using VarNameToHist2D = std::map<std::string, TH2F*>;
 
 class DistributionsDifference {
 public:
@@ -25,13 +24,8 @@ public:
 
   std::map<std::string, double> GetMeans(const std::string&) const;
 
-  std::map<std::string, double> GetRMSs_2D(const std::string&) const;
-
-  std::map<std::string, double> GetMeans_2D(const std::string&) const;
-
 private:
   std::map<std::string, VarNameToHist> set_name_to_histos;
-  std::map<std::string, VarNameToHist2D> set_name_to_histos2D;
 };
 
 #endif
