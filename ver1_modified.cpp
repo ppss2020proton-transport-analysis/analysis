@@ -771,6 +771,10 @@ void ProtonTransport::simple_tracking(double obs_point){
       else ProtonTransport::Marker(Observe);
     }
 
+    if (is_current_lost) {
+      is_current_lost=false;
+      break;
+    }
 
     if (z > 130. && !BeampipesAreSeparated)
     {
@@ -817,7 +821,7 @@ void ProtonTransport::simple_tracking(double obs_point){
   tree->Write();
 //  p->Write();
   p->Close();
-  cout<<lost_protons.size()<<'\n';
+  std::cout << "Number of lost protons: " << lost_protons.size() << '\n';
 
 }
 
