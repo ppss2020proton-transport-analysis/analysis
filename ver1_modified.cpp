@@ -436,7 +436,7 @@ void ProtonTransport::simple_quadrupole(double L, double K1L, double rect_x, dou
   else //vertical focussing
   {
     fabs(y0)  > 1.e-15 ? y0 =  cos(qkl) * y0       : y0 = 0.;
-    fabs(sy0) > 1.e-15 ? y0 += sin(qkl) * sy / qk : y0 += 0.;
+    fabs(sy0) > 1.e-15 ? y0 += sin(qkl) * sy0 / qk : y0 += 0.;
 
     fabs(x0)  > 1.e-15 ? x0 = cosh(qkl) * x0        : x0 = 0.;
     fabs(sx0) > 1.e-15 ? x0 += sinh(qkl) * sx0 / qk : x0 += 0.;
