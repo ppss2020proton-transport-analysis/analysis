@@ -770,7 +770,6 @@ void ProtonTransport::simple_tracking(double obs_point){
       if (stod(element[a].at(2)) > 1.e-10) ProtonTransport::simple_drift(stod(element[a].at(2)));
       else ProtonTransport::Marker(Observe);
     }
-    
 
 
     if (z > 130. && !BeampipesAreSeparated)
@@ -797,7 +796,7 @@ void ProtonTransport::simple_tracking(double obs_point){
       break;
     }
 
-}
+  }
   
 }
 
