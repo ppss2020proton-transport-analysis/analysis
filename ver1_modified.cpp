@@ -724,22 +724,26 @@ void ProtonTransport::simple_tracking(double obs_point){
       if ( fabs(stod(element[a].at(5))) > 1.e-10 )
       {
         cout << "Warning! MULTIPOLE taken as rectangular dipole! Check in twiss files if this is correct! Position: " << element[a].at(1) << endl;
-        ProtonTransport::simple_rectangular_dipole(stod(element[a].at(2)), stod(element[a].at(5))); //L, K0L
+        ProtonTransport::simple_rectangular_dipole(stod(element[a].at(2)), stod(element[a].at(5)), 
+                                                   stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13))); //L, K0L
       }
       else if ( fabs(stod(element[a].at(3))) > 1.e-10 )
       {
         cout << "Warning! MULTIPOLE taken as horizontal kicker! Check in twiss files if this is correct! Position: " << element[a].at(1) << endl;
-        ProtonTransport::simple_horizontal_kicker(stod(element[a].at(2)), stod(element[a].at(3))); //L, HKICK
+        ProtonTransport::simple_horizontal_kicker(stod(element[a].at(2)), stod(element[a].at(3)),
+                                                  stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13))); //L, HKICK
       }
       else if ( fabs(stod(element[a].at(4))) > 1.e-10 )
       {
         cout << "Warning! MULTIPOLE taken as vertical kicker! Check in twiss files if this is correct! Position: " << element[a].at(1) << endl;
-        ProtonTransport::simple_vertical_kicker(stod(element[a].at(2)), stod(element[a].at(4))); //L, VKICK
+        ProtonTransport::simple_vertical_kicker(stod(element[a].at(2)), stod(element[a].at(4)),
+                                                stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13))); //L, VKICK
       }
       else if ( fabs(stod(element[a].at(6))) > 1.e-10 )
       {
         cout << "Warning! MULTIPOLE taken as quadrupole! Check in twiss files if this is correct! Position: " << element[a].at(1) << endl;
-        ProtonTransport::simple_quadrupole(stod(element[a].at(2)), stod(element[a].at(6))); //L, K1L
+        ProtonTransport::simple_quadrupole(stod(element[a].at(2)), stod(element[a].at(6)),
+                                           stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13)), Observe); //L, K1L 
       }
       else
       {
@@ -812,7 +816,7 @@ std::string ProtonTransport::GetROOTOutputFileName() const {
 }
 
 void ProtonTransport::WriteLostProtonsInCsv(const std::string& filename) const {
-  std::ofstrem f;
+  std::ofstream f;
   f.open(filename, std::fstream::app);
 
   f << "No," << "px," << "py," << "pz\n";
