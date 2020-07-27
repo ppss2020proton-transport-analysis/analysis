@@ -141,6 +141,8 @@ class ProtonTransport {
     void SetMagnets(const std::vector<Magnet>&); 
     bool isLost(double, double, double, double, double, double);
     bool is_current_lost=false;
+    double sigma = 0; // sigma = sqrt(eps * beta / gamma) sqrt(10e-2 m * 10e-6 m * rad) 
+    string collimator_name = "";
   private:
     double IP1Pos;
     double x, y, z, px, py, pz, sx, sy;
@@ -159,7 +161,7 @@ class ProtonTransport {
     bool BeampipesAreSeparated;
     double BeampipeSeparation;
     void Marker(bool);
-    void simple_drift(double, bool);
+    void simple_drift(double, bool, double, double, double, double);
     void simple_rectangular_dipole(double, double, double, double, double, double);
     void simple_horizontal_kicker(double, double, double, double, double, double);
     void simple_vertical_kicker(double, double, double, double, double, double);
@@ -251,10 +253,23 @@ void ProtonTransport::Marker(bool verbose=false){
 	//cout << z << "\t" << x << "\t" << y << "\t" << sx*pz << "\t" << sy*pz << endl;
 }  
 
-void ProtonTransport::simple_drift(double L, bool verbose=false){
-  x+=L*sx;
-  y+=L*sy;
-  z+=L;
+void ProtonTransport::simple_drift(double L, bool verbose=false, double rect_x=0, double rect_y=0, double el_x=0, double el_y=0){
+  double x0 = x;
+  double y0 = y;
+  double z0 = z;
+  x0+=L*sx;
+  y0+=L*sy;
+  z0+=L;
+  if (collimator_name == "RCOLLIMATOR1" || collimator_name == "RCOLLIMATOR2") {
+    if (!isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
+      x = x0;
+      y = y0;
+      z = z0;
+    } else {
+      lost_protons.push_back(std::vector<double>{px, py, pz});
+    }
+  } 
+
   if (!verbose) return;
   cout << "DRIFT\t";
   cout << "z [m]: " << z;
@@ -593,16 +608,30 @@ void ProtonTransport::SetMagnets(const std::vector<Magnet>& magnets_) {
 }
 
 bool ProtonTransport::isLost(double x0, double y0, double rect_x, double rect_y, double el_x, double el_y) {
+  //if (collimator_name == "RCOLLIMATOR1") {
+  //  rect_x = 15 * sigma;
+  //  el_x = 15 * sigma;
+  //} else if (collimator_name == "RCOLLIMATOR2") {
+  //  rect_x = 35 * sigma;
+  //  el_x = 35 * sigma;
+  //}
+
   if ((x0*x0/(el_x*el_x) + y0*y0/(el_y*el_y) > 1) || ((fabs(x0) > rect_x) || (fabs(y0) > rect_y))) {
     is_current_lost=true;
     return 1;
   } else {
-
     return 0;
   }
 }
 
 void ProtonTransport::simple_tracking(double obs_point){
+
+  double gamma = 6927.628/0.938;
+  double beta = 0.4;
+  double epsilon = 3.5 * 10e-6;
+  sigma = sqrt(beta * epsilon / gamma);
+  std::cout << "Sigma1 = " << 15 * sigma << std::endl;
+  std::cout << "Sigma2 = " << 35 * sigma << std::endl;
 
   int m_process_code;
   vector<float> *m_px;
@@ -756,6 +785,20 @@ void ProtonTransport::simple_tracking(double obs_point){
         ProtonTransport::simple_drift(stod(element[a].at(2)), Observe); // L
       }
 
+    }
+    else if (stod(element[a].at(1)) == 150.53) 
+    {
+      // 15 * sigma   
+      collimator_name = "RCOLLIMATOR1";
+      ProtonTransport::simple_drift(stod(element[a].at(2)), false, stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13))); 
+      collimator_name = "";
+    }
+    else if (stod(element[a].at(1)) == 184.857)
+    {
+      // 45 * sigma 
+      collimator_name = "RCOLLIMATOR2";
+      ProtonTransport::simple_drift(stod(element[a].at(2)), false, stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13))); 
+      collimator_name = "";
     }
 /*
    The following elements are taken as a drift (if L!=0) or monitor (if L=0):
