@@ -4,6 +4,8 @@
  \date 21/03/2020
 */
 #include <iostream>
+#include <iomanip>
+#include <stdio.h>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -12,6 +14,7 @@
 #include <unistd.h>
 
 #include <TFile.h>
+#include <TRandom.h>
 #include <TSystem.h>
 #include <TH1F.h>
 #include <TTree.h>
@@ -36,39 +39,53 @@ using std::string;
 using std::ifstream;
 using std::istringstream;
 
+
+
+double ApplyOperation(double lvalue, double rvalue, const std::string& op) {
+  if (op == "+") {
+    return lvalue + rvalue;
+  } else if (op == "-") {
+    return lvalue - rvalue;
+  } else if (op == "*") {
+    return lvalue * rvalue;
+  } 
+  return 0;
+}
+
 bool operator < (Magnet lhs, Magnet rhs) {
-  if (lhs.GetType() != rhs.GetType()) {
-    return lhs.GetType() < rhs.GetType();
-  } else {
-    return lhs.GetId() < rhs.GetId(); 
-  }
+  return lhs.GetName() < rhs.GetName();
 }
 
 bool operator == (Magnet lhs, Magnet rhs) {
-  if ((lhs.GetType() == rhs.GetType()) && (lhs.GetId() == rhs.GetId())) {
-    return 1;
-  } else {
-    return 0;
-  }
+  return lhs.GetName() == rhs.GetName();
 }
 
 // 6 quadrupoles, 2 dipoles, 5 horizotal kickers and 5 vertical kickers
+
 struct MagnetIdIterators {
-  int dipole_it = 0;
-  int quadrupole_it = 0;
-  int vertical_kicker_it = 0;
-  int horizontal_kicker_it = 0;
+  void IncreaseItByOne(const std::string& it_name) {
+    it_name_to_it.at(it_name) += 1;
+  }
+
+  int GetIt(const std::string& it_name) {
+    return it_name_to_it.at(it_name);
+  }
+
+  std::map<std::string, int> it_name_to_it = {{"RBEND_it", 0},
+                                              {"QUADRUPOLE_it", 0}, 
+                                              {"VKICKER_it", 0}, 
+                                              {"HKICKER_it", 0}};
 };
 
 class FileName {
 public:
   FileName(const std::string& init_filename, 
-           const std::map<Magnet, Shift>& m_to_s, 
-           const std::map<Magnet, double> m_to_r) 
+           bool is_shifted, 
+           bool is_strength_changed) 
     : init_filename(init_filename),
       output_filename(""),
-      magnet_to_shift(m_to_s), 
-      magnet_to_ratio(m_to_r) 
+      is_shifted(is_shifted),
+      is_strength_changed(is_strength_changed)
   {
   }
 
@@ -76,11 +93,11 @@ public:
     output_filename += "root_PPSS_2020/";
     output_filename.push_back(init_filename[26]);
 
-    if (!magnet_to_shift.empty()) {
+    if (is_shifted) {
       output_filename += "_shifted_";
     }
 
-    if (!magnet_to_ratio.empty()) {
+    if (is_strength_changed) {
       output_filename += "_changed_strength_";
     }
 
@@ -96,15 +113,15 @@ public:
 private:
   std::string init_filename;
   std::string output_filename;
-  std::map<Magnet, Shift> magnet_to_shift;
-  std::map<Magnet, double> magnet_to_ratio;
+  bool is_shifted = false;
+  bool is_strength_changed = false;
 };
 
 class ProtonTransport {
   public:
     ProtonTransport(); //!< constructor 
     ~ProtonTransport(); //!< destructor 
-    void PrepareBeamline(bool); 
+    void PrepareBeamline(bool, bool); 
     void simple_tracking(double);
     void simple_pythia_tracking(double);
     void SetBeamEnergy(double);
@@ -116,13 +133,24 @@ class ProtonTransport {
     void SetStrengthRatio(const Magnet&, double);
     void ApplyStrengthRatio(const Magnet&, double&);
     void SetProcessedFileName(const std::string&);
+    std::string GetROOTOutputFileName() const;
+    void WriteChangesInCsv(const std::string&, DistributionsDifference*, int);
+    void WriteLostProtonsInCsv(const std::string&) const;
+    void SetPositions();
+    std::vector<Magnet> GetMagnets() const;
+    void SetMagnets(const std::vector<Magnet>&); 
+    bool isLost(double, double, double, double, double, double);
+    bool is_current_lost=false;
   private:
     double IP1Pos;
     double x, y, z, px, py, pz, sx, sy;
     std::map<Magnet, Shift> magnet_to_shift;
     MagnetIdIterators iterators;
     std::string processed_filename;
+    std::string optics_root_file_name;
     std::map<Magnet, double> magnet_to_ratio;
+    std::vector<Magnet> magnets;
+    std::vector<std::vector<double>> lost_protons;
     //obj type -diplole quadrupole etc
     //shift obj id 1st 2dn dipole etc ; shift value - self explanatory ;shift axis_axis- x y z strength - condition applied in magnet methods
     // values or vectors- depending if we'll shift 2 things at once - if not values will work
@@ -132,10 +160,10 @@ class ProtonTransport {
     double BeampipeSeparation;
     void Marker(bool);
     void simple_drift(double, bool);
-    void simple_rectangular_dipole(double, double);
-    void simple_horizontal_kicker(double, double);
-    void simple_vertical_kicker(double, double);
-    void simple_quadrupole(double, double, bool);
+    void simple_rectangular_dipole(double, double, double, double, double, double);
+    void simple_horizontal_kicker(double, double, double, double, double, double);
+    void simple_vertical_kicker(double, double, double, double, double, double);
+    void simple_quadrupole(double, double, double, double, double, double, bool);
     vector <vector <string> > element;
     bool DoApertureCut;
 };
@@ -239,29 +267,42 @@ void ProtonTransport::simple_drift(double L, bool verbose=false){
   cout << "\tsy: " << sy << endl;
 }
 
-void ProtonTransport::simple_rectangular_dipole(double L, double K0L){
-  iterators.dipole_it += 1;
-  DoShift(Dipole{iterators.dipole_it}, "subtract");
-  ApplyStrengthRatio(Dipole{iterators.dipole_it}, K0L);
+void ProtonTransport::simple_rectangular_dipole(double L, double K0L, double rect_x, double rect_y, double el_x, double el_y){
+  iterators.IncreaseItByOne("RBEND_it");
+  //std::cout << "DIP" << iterators.GetIt("RBEND_it") << std::endl;
+  ApplyStrengthRatio(Dipole(iterators.GetIt("RBEND_it"), 0), K0L);
 
   if (fabs(K0L) < 1.e-15)
   {
     simple_drift(L);
     return;
   }
-  z += L;
-  x += L*sx + L*0.5*K0L*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
-  y += L*sy;
-  sx += K0L*beam_energy/pz;
+  DoShift(Dipole(iterators.GetIt("RBEND_it"), 0), "-");
+  double x0 = x;
+  double y0 = y;
+  double z0 = z;
+  double sx0 = sx;
+  z0 += L;
+  x0 += L*sx + L*0.5*K0L*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
+  y0 += L*sy;
+  sx0 += K0L*beam_energy/pz;
   //sy does not change
+  if (!isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
+    x = x0;
+    y = y0;
+    z = z0;
+    sx = sx0;
+  } else {
+    lost_protons.push_back(std::vector<double>{px, py, pz});
+  }
 
-  DoShift(Dipole{iterators.dipole_it}, "addict");
+  DoShift(Dipole(iterators.GetIt("RBEND_it"), 0), "+");
 }
 
-void ProtonTransport::simple_horizontal_kicker(double L, double HKICK){
-  iterators.horizontal_kicker_it += 1;
-  DoShift(HorizontalKicker{iterators.horizontal_kicker_it}, "subtract");
-  ApplyStrengthRatio(HorizontalKicker{iterators.horizontal_kicker_it}, HKICK);
+void ProtonTransport::simple_horizontal_kicker(double L, double HKICK, double rect_x, double rect_y, double el_x, double el_y){
+  iterators.IncreaseItByOne("HKICKER_it");
+  //std::cout << "HKICKER" << iterators.GetIt("HKICKER_it") << std::endl;
+  ApplyStrengthRatio(HorizontalKicker(iterators.GetIt("HKICKER_it"), 0), HKICK);
 
 
   if (fabs(HKICK) < 1.e-15)
@@ -269,30 +310,56 @@ void ProtonTransport::simple_horizontal_kicker(double L, double HKICK){
     simple_drift(L);
     return;
   }
-  z += L;
-  x += L*sx + L*0.5*HKICK*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
-  y += L*sy;
-  sx += HKICK*beam_energy/pz;
+  DoShift(HorizontalKicker(iterators.GetIt("HKICKER_it"), 0), "-");
+  double x0 = x;
+  double y0 = y;
+  double z0 = z;
+  double sx0 = sx;
+  z0 += L;
+  x0 += L*sx + L*0.5*HKICK*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
+  y0 += L*sy;
+  sx0 += HKICK*beam_energy/pz;
+  if (!isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
+    x = x0;
+    y = y0;
+    z = z0;
+    sx = sx0;
+  } else {
+    lost_protons.push_back(std::vector<double>{px, py, pz});
+  }
 
-  DoShift(HorizontalKicker{iterators.horizontal_kicker_it}, "addict");
+  DoShift(HorizontalKicker(iterators.GetIt("HKICKER_it"), 0), "+");
 }
 
-void ProtonTransport::simple_vertical_kicker(double L, double VKICK){
-  iterators.vertical_kicker_it += 1;
-  DoShift(VerticalKicker{iterators.vertical_kicker_it}, "subtract");
-  ApplyStrengthRatio(VerticalKicker{iterators.vertical_kicker_it}, VKICK);
+void ProtonTransport::simple_vertical_kicker(double L, double VKICK, double rect_x, double rect_y, double el_x, double el_y){
+  iterators.IncreaseItByOne("VKICKER_it");
+  //std::cout << "VKICKER" << iterators.GetIt("VKICKER_it") << std::endl;
+  ApplyStrengthRatio(VerticalKicker(iterators.GetIt("VKICKER_it"), 0), VKICK);
 
   if (fabs(VKICK) < 1.e-15)
   {
     simple_drift(L);
     return;
   }
-  z += L;
-  x += L*sx;
-  y += L*sy + L*0.5*VKICK*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
-  sy += VKICK*beam_energy/pz;
+  DoShift(VerticalKicker(iterators.GetIt("VKICKER_it"), 0), "-");
+  double x0 = x;
+  double y0 = y;
+  double z0 = z;
+  double sy0 = sy;
+  z0 += L;
+  x0 += L*sx;
+  y0 += L*sy + L*0.5*VKICK*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
+  sy0 += VKICK*beam_energy/pz;
+  if (!isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
+    x = x0;
+    y = y0;
+    z = z0;
+    sy = sy0;
+  } else {
+    lost_protons.push_back(std::vector<double>{px, py, pz});
+  }
 
-  DoShift(VerticalKicker{iterators.vertical_kicker_it}, "addict"); 
+  DoShift(VerticalKicker(iterators.GetIt("VKICKER_it"), 0), "+"); 
 }
 
 
@@ -300,24 +367,24 @@ void ProtonTransport::SetShift(const Magnet& magnet, const Shift& shift){ //1 qu
   magnet_to_shift[magnet] = shift;
 }
 
-void ProtonTransport::DoShift(const Magnet& m, const string& command) {
+void ProtonTransport::DoShift(const Magnet& m, const string& op) {
   if (magnet_to_shift.find(m) != magnet_to_shift.end()) {
-    if (command == "addict") {
-      x += magnet_to_shift.at(m).GetXShift(); 
-      y += magnet_to_shift.at(m).GetYShift(); 
-      z += magnet_to_shift.at(m).GetZShift(); 
-    } else if (command == "subtract") {
-      x -= magnet_to_shift.at(m).GetXShift(); 
-      y -= magnet_to_shift.at(m).GetYShift(); 
-      z -= magnet_to_shift.at(m).GetZShift(); 
-    } else {
-      std::cout << "No such command!" << std::endl;
+    if (magnet_to_shift.at(m).GetXShift() != 0) x = ApplyOperation(x, magnet_to_shift.at(m).GetXShift(), op);
+    if (magnet_to_shift.at(m).GetYShift() != 0) y = ApplyOperation(y, magnet_to_shift.at(m).GetYShift(), op);
+    if (magnet_to_shift.at(m).GetZShift() != 0) {
+      z = ApplyOperation(z, magnet_to_shift.at(m).GetZShift(), op);
+      x = ApplyOperation(x, 
+                         ApplyOperation(sx, magnet_to_shift.at(m).GetZShift(), "*"), 
+                         "+");
+      y = ApplyOperation(y, 
+                         ApplyOperation(sy, magnet_to_shift.at(m).GetZShift(), "*"), 
+                         "+");
     }
   }
 }
 
-void ProtonTransport::SetStrengthRatio(const Magnet& m, double ratio) {
-  magnet_to_ratio[m] = ratio;
+void ProtonTransport::SetStrengthRatio(const Magnet& magnet, double ratio) {
+  magnet_to_ratio[magnet] = ratio;
 }
 
 void ProtonTransport::ApplyStrengthRatio(const Magnet& m, double& strength) {
@@ -330,9 +397,10 @@ void ProtonTransport::SetProcessedFileName(const std::string& filename) {
   processed_filename = filename;
 }
 
-void ProtonTransport::simple_quadrupole(double L, double K1L, bool verbose=false){
-  iterators.quadrupole_it += 1;
-  ApplyStrengthRatio(Quadrupole{iterators.quadrupole_it}, K1L);
+void ProtonTransport::simple_quadrupole(double L, double K1L, double rect_x, double rect_y, double el_x, double el_y, bool verbose=false){
+  iterators.IncreaseItByOne("QUADRUPOLE_it");
+  //std::cout << "Q" << iterators.GetIt("QUADRUPOLE_it") << std::endl;
+  ApplyStrengthRatio(Quadrupole(iterators.GetIt("QUADRUPOLE_it"), 0), K1L);
 
   if (fabs(K1L) < 1.e-15)
   {
@@ -340,47 +408,60 @@ void ProtonTransport::simple_quadrupole(double L, double K1L, bool verbose=false
     return;
   }
 
-  DoShift(Quadrupole{iterators.quadrupole_it}, "subtract"); 
+  DoShift(Quadrupole(iterators.GetIt("QUADRUPOLE_it"), 0), "-"); 
 
+  double x0 = x;
+  double y0 = y;
+  double z0 = z;
+  double sx0 = sx;
+  double sy0 = sy;
 
-
-  z += L;
+  z0 += L;
   double qk  = sqrt((fabs(K1L) * beam_energy)/(pz * L));
   double qkl = qk * L;
-  double x_tmp = x;
-  double y_tmp = y;
+  double x_tmp = x0;
+  double y_tmp = y0;
 
   if (K1L >= 0.) //horizontal focussing
   {
-    fabs(x)  > 1.e-15 ? x =  cos(qkl) * x       : x = 0.;
-    fabs(sx) > 1.e-15 ? x += sin(qkl) * sx / qk : x += 0.;
+    fabs(x0)  > 1.e-15 ? x0 =  cos(qkl) * x0       : x0 = 0.;
+    fabs(sx0) > 1.e-15 ? x0 += sin(qkl) * sx0 / qk : x0 += 0.;
 
-    fabs(y)  > 1.e-15 ? y = cosh(qkl) * y        : y = 0.;
-    fabs(sy) > 1.e-15 ? y += sinh(qkl) * sy / qk : y += 0.;
+    fabs(y0)  > 1.e-15 ? y0 = cosh(qkl) * y0        : y0 = 0.;
+    fabs(sy0) > 1.e-15 ? y0 += sinh(qkl) * sy0 / qk : y0 += 0.;
 
-    fabs(sx) > 1.e-15 ? sx = cos(qkl) * sx           : sx = 0.;
-    fabs(x_tmp)  > 1.e-15 ? sx += -qk * sin(qkl) * x_tmp : sx += 0.;
+    fabs(sx0) > 1.e-15 ? sx0 = cos(qkl) * sx0           : sx0 = 0.;
+    fabs(x_tmp)  > 1.e-15 ? sx0 += -qk * sin(qkl) * x_tmp : sx0 += 0.;
 
-    fabs(sy) > 1.e-15 ? sy = cosh(qkl) * sy          : sy = 0.;
-    fabs(y_tmp)  > 1.e-15 ? sy += qk * sinh(qkl) * y_tmp : sy += 0.;
+    fabs(sy0) > 1.e-15 ? sy0 = cosh(qkl) * sy0          : sy0 = 0.;
+    fabs(y_tmp)  > 1.e-15 ? sy0 += qk * sinh(qkl) * y_tmp : sy0 += 0.;
   }
   else //vertical focussing
   {
-    fabs(y)  > 1.e-15 ? y =  cos(qkl) * y       : y = 0.;
-    fabs(sy) > 1.e-15 ? y += sin(qkl) * sy / qk : y += 0.;
+    fabs(y0)  > 1.e-15 ? y0 =  cos(qkl) * y0       : y0 = 0.;
+    fabs(sy0) > 1.e-15 ? y0 += sin(qkl) * sy / qk : y0 += 0.;
 
-    fabs(x)  > 1.e-15 ? x = cosh(qkl) * x        : x = 0.;
-    fabs(sx) > 1.e-15 ? x += sinh(qkl) * sx / qk : x += 0.;
+    fabs(x0)  > 1.e-15 ? x0 = cosh(qkl) * x0        : x0 = 0.;
+    fabs(sx0) > 1.e-15 ? x0 += sinh(qkl) * sx0 / qk : x0 += 0.;
 
-    fabs(sy) > 1.e-15 ? sy = cos(qkl) * sy           : sy = 0.;
-    fabs(y_tmp)  > 1.e-15 ? sy += -qk * sin(qkl) * y_tmp : sy += 0.;
+    fabs(sy0) > 1.e-15 ? sy0 = cos(qkl) * sy0           : sy0 = 0.;
+    fabs(y_tmp)  > 1.e-15 ? sy0 += -qk * sin(qkl) * y_tmp : sy0 += 0.;
 
-    fabs(sx) > 1.e-15 ? sx = cosh(qkl) * sx          : sx = 0.;
-    fabs(x_tmp)  > 1.e-15 ? sx += qk * sinh(qkl) * x_tmp : sx += 0.;
+    fabs(sx0) > 1.e-15 ? sx0 = cosh(qkl) * sx0          : sx0 = 0.;
+    fabs(x_tmp)  > 1.e-15 ? sx0 += qk * sinh(qkl) * x_tmp : sx0 += 0.;
+  }
+  if (!isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
+    x = x0;
+    y = y0;
+    z = z0;
+    sx = sx0;
+    sy = sy0;
+  } else {
+    lost_protons.push_back(std::vector<double>{px, py, pz});
   }
   
 
-  DoShift(Quadrupole{iterators.quadrupole_it}, "addict"); 
+  DoShift(Quadrupole(iterators.GetIt("QUADRUPOLE_it"), 0), "+"); 
 
 
 // std::cout<<numb_of_obj_uses<<'\n';
@@ -402,7 +483,7 @@ void ProtonTransport::simple_quadrupole(double L, double K1L, bool verbose=false
 
 Twiss files may provide 
 */
-void ProtonTransport::PrepareBeamline(bool verbose=false){
+void ProtonTransport::PrepareBeamline(bool verbose=false, bool is_default=false){
 
   vector <string> sorted_param; //type, S, L, HKICK, VKICK, K0L, K1L, K2L, K3L, APERTYPE, APER_1, APER_2, APER_3, APER_4, X, Y, PX, PY
   vector <string> unsorted_name;
@@ -476,6 +557,49 @@ void ProtonTransport::PrepareBeamline(bool verbose=false){
     element.push_back(sorted_param);
     
   }
+
+  if (is_default) SetPositions();
+}
+
+void ProtonTransport::SetPositions() {
+  if (element.empty()) {
+    std::cout << "Use PrepareBeamline() first!" << std::endl;
+    return;
+  }
+  for (const auto& el : element) {
+    if (stod(el[1]) > 205.) break;
+    if (el[0] == "\"QUADRUPOLE\"") {
+      iterators.IncreaseItByOne("QUADRUPOLE_it");
+      magnets.push_back(Quadrupole(iterators.GetIt("QUADRUPOLE_it"), stod(el[1])));
+    } else if (el[0] == "\"RBEND\"") {
+      iterators.IncreaseItByOne("RBEND_it");
+      magnets.push_back(Dipole(iterators.GetIt("RBEND_it"), stod(el[1])));
+    } else if (el[0] == "\"VKICKER\"") {
+      iterators.IncreaseItByOne("VKICKER_it");
+      magnets.push_back(VerticalKicker(iterators.GetIt("VKICKER_it"), stod(el[1])));
+    } else if (el[0] == "\"HKICKER\"") {
+      iterators.IncreaseItByOne("HKICKER_it");
+      magnets.push_back(HorizontalKicker(iterators.GetIt("HKICKER_it"), stod(el[1])));
+    }
+  }
+}
+
+std::vector<Magnet> ProtonTransport::GetMagnets() const {
+  return magnets;
+}
+
+void ProtonTransport::SetMagnets(const std::vector<Magnet>& magnets_) {
+  magnets  = magnets_;
+}
+
+bool ProtonTransport::isLost(double x0, double y0, double rect_x, double rect_y, double el_x, double el_y) {
+  if ((x0*x0/(el_x*el_x) + y0*y0/(el_y*el_y) > 1) || ((fabs(x0) > rect_x) || (fabs(y0) > rect_y))) {
+    is_current_lost=true;
+    return 1;
+  } else {
+
+    return 0;
+  }
 }
 
 void ProtonTransport::simple_tracking(double obs_point){
@@ -523,11 +647,11 @@ void ProtonTransport::simple_tracking(double obs_point){
   float n_px, n_py, n_pz, n_e;
   float n_x, n_y, n_sx, n_sy;
 
-  FileName* fn = new FileName(processed_filename, magnet_to_shift, magnet_to_ratio);
+  FileName* fn = new FileName(processed_filename, !magnet_to_shift.empty(), !magnet_to_ratio.empty());
   fn->ProcessFileName();
-  std::string optics_root_file_name = fn->GetOutputFileName();
+  optics_root_file_name = fn->GetOutputFileName();
 
-  std::cout << "The ROOT output file: " << optics_root_file_name << std::endl << std::endl; 
+  std::cout << "The ROOT output file: " << optics_root_file_name << std::endl; 
   TFile * p = new TFile(optics_root_file_name.c_str(),"recreate");
 
   TH1F * cs = new TH1F("sigma", "cross-section [mb]", 1, 0., 1.);
@@ -546,6 +670,7 @@ void ProtonTransport::simple_tracking(double obs_point){
   
   for (int evt=0; evt<nevents; evt++)
   {
+    //std::cout << "\n\nRESET\n\n" << std::endl;
     iterators = {};
     ntuple->GetEntry(evt);
 
@@ -580,38 +705,57 @@ void ProtonTransport::simple_tracking(double obs_point){
     if (fabs(z+stod(element[a].at(2)) - obs_point) < 1.e-3 && !Observe && !Observed) {Observed = true; Observe = true;}
     else Observe = false;
     if ((element[a].at(0)).compare("\"MARKER\"") == 0) ProtonTransport::Marker(Observe); //Marker(true) will return proton x, y, z, px, py, pz at position of marker
-    else if ((element[a].at(0)).compare("\"DRIFT\"") == 0) ProtonTransport::simple_drift(stod(element[a].at(2)), Observe); // L
-    else if ((element[a].at(0)).compare("\"RBEND\"") == 0) ProtonTransport::simple_rectangular_dipole(stod(element[a].at(2)), stod(element[a].at(5))); //L, K0L
-    else if ((element[a].at(0)).compare("\"HKICKER\"") == 0) ProtonTransport::simple_horizontal_kicker(stod(element[a].at(2)), stod(element[a].at(3))); //L, HKICK
-    else if ((element[a].at(0)).compare("\"VKICKER\"") == 0) ProtonTransport::simple_vertical_kicker(stod(element[a].at(2)), stod(element[a].at(4))); //L, VKICK
-    else if ((element[a].at(0)).compare("\"QUADRUPOLE\"") == 0) ProtonTransport::simple_quadrupole(stod(element[a].at(2)), stod(element[a].at(6)), Observe); //L, K1L 
+    else if ((element[a].at(0)).compare("\"DRIFT\"") == 0) {
+      ProtonTransport::simple_drift(stod(element[a].at(2)), Observe); // L
+    }
+    else if ((element[a].at(0)).compare("\"RBEND\"") == 0) { 
+      ProtonTransport::simple_rectangular_dipole(stod(element[a].at(2)), stod(element[a].at(5)), 
+                                                 stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13))); //L, K0L
+    }  
+    else if ((element[a].at(0)).compare("\"HKICKER\"") == 0) { 
+      ProtonTransport::simple_horizontal_kicker(stod(element[a].at(2)), stod(element[a].at(3)),
+                                                stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13))); //L, HKICK
+    }
+    else if ((element[a].at(0)).compare("\"VKICKER\"") == 0) { 
+      ProtonTransport::simple_vertical_kicker(stod(element[a].at(2)), stod(element[a].at(4)),
+                                              stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13))); //L, VKICK
+    }
+    else if ((element[a].at(0)).compare("\"QUADRUPOLE\"") == 0) { 
+      ProtonTransport::simple_quadrupole(stod(element[a].at(2)), stod(element[a].at(6)),
+                                         stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13)), Observe); //L, K1L 
+    }
     else if ((element[a].at(0)).compare("\"MULTIPOLE\"") == 0)
     {
       if ( fabs(stod(element[a].at(5))) > 1.e-10 )
       {
         cout << "Warning! MULTIPOLE taken as rectangular dipole! Check in twiss files if this is correct! Position: " << element[a].at(1) << endl;
-        ProtonTransport::simple_rectangular_dipole(stod(element[a].at(2)), stod(element[a].at(5))); //L, K0L
+        ProtonTransport::simple_rectangular_dipole(stod(element[a].at(2)), stod(element[a].at(5)), 
+                                                   stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13))); //L, K0L
       }
       else if ( fabs(stod(element[a].at(3))) > 1.e-10 )
       {
         cout << "Warning! MULTIPOLE taken as horizontal kicker! Check in twiss files if this is correct! Position: " << element[a].at(1) << endl;
-        ProtonTransport::simple_horizontal_kicker(stod(element[a].at(2)), stod(element[a].at(3))); //L, HKICK
+        ProtonTransport::simple_horizontal_kicker(stod(element[a].at(2)), stod(element[a].at(3)),
+                                                  stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13))); //L, HKICK
       }
       else if ( fabs(stod(element[a].at(4))) > 1.e-10 )
       {
         cout << "Warning! MULTIPOLE taken as vertical kicker! Check in twiss files if this is correct! Position: " << element[a].at(1) << endl;
-        ProtonTransport::simple_vertical_kicker(stod(element[a].at(2)), stod(element[a].at(4))); //L, VKICK
+        ProtonTransport::simple_vertical_kicker(stod(element[a].at(2)), stod(element[a].at(4)),
+                                                stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13))); //L, VKICK
       }
       else if ( fabs(stod(element[a].at(6))) > 1.e-10 )
       {
         cout << "Warning! MULTIPOLE taken as quadrupole! Check in twiss files if this is correct! Position: " << element[a].at(1) << endl;
-        ProtonTransport::simple_quadrupole(stod(element[a].at(2)), stod(element[a].at(6))); //L, K1L
+        ProtonTransport::simple_quadrupole(stod(element[a].at(2)), stod(element[a].at(6)),
+                                           stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13)), Observe); //L, K1L 
       }
       else
       {
 //TODO        cout << "Warning! MULTIPOLE taken as drift! Check in twiss files if this is correct! Position: " << element[a].at(1) << endl;
         ProtonTransport::simple_drift(stod(element[a].at(2)), Observe); // L
       }
+
     }
 /*
    The following elements are taken as a drift (if L!=0) or monitor (if L=0):
@@ -627,6 +771,8 @@ void ProtonTransport::simple_tracking(double obs_point){
       else ProtonTransport::Marker(Observe);
     }
     
+
+
     if (z > 130. && !BeampipesAreSeparated)
     {
       BeampipesAreSeparated = true;
@@ -644,13 +790,15 @@ void ProtonTransport::simple_tracking(double obs_point){
       n_y = y - sy*(z - obs_point);
       n_sx = sx;
       n_sy = sy;
+      
       tree->Fill();
+      
+      
       break;
     }
 
-  
 }
-
+  
 }
 
 }
@@ -670,116 +818,144 @@ void ProtonTransport::simple_tracking(double obs_point){
   tree->Write();
 //  p->Write();
   p->Close();
+  cout<<lost_protons.size()<<'\n';
 
+}
+
+std::string ProtonTransport::GetROOTOutputFileName() const {
+  return optics_root_file_name;
+}
+
+void ProtonTransport::WriteLostProtonsInCsv(const std::string& filename) const {
+  std::ofstream f;
+  f.open(filename, std::fstream::app);
+
+  f << "No," << "px," << "py," << "pz\n";
+
+  for (int i = 0; i < lost_protons.size(); i++) {
+    f << i << "," << lost_protons[i][0] 
+      << "," << lost_protons[i][1] << "," 
+      << lost_protons[i][2] << "\n";
+  }
+
+  f.close();
+}
+
+void ProtonTransport::WriteChangesInCsv(const std::string& filename, DistributionsDifference* diff, int run_id) {
+  std::map<std::string, double> var_name_to_rms = diff->GetRMSs("histos_1d_diffs");
+  std::map<std::string, double> var_name_to_mean = diff->GetMeans("histos_1d_diffs");
+
+  std::ofstream f;
+  f.open(filename, std::fstream::app);
+  
+  // Check if file's not empty (or we already have columns names)
+  std::ifstream f_check;
+  f_check.open(filename);
+  if (f_check.peek() == std::ifstream::traits_type::eof()) {
+    f << "No," << "Magnet," << "Position," << "x_shift[m]," << "y_shift[m]," << "z_shift[m]," << "Strength_ratio";
+    for (const auto& [var_name, rms] : var_name_to_rms) {
+      f << "," << "RMS(" << var_name << ")," << "Mean(" << var_name << ")"; 
+    }
+    f << "\n";
+  }
+  f_check.close();
+  
+  int local_run_id = 1;
+  if (!magnet_to_shift.empty()) {
+    for (const auto& [magnet, shift] : magnet_to_shift) {
+      f << run_id << "_" << local_run_id << "," 
+        << magnet.GetName() << "," 
+        << magnet.GetPosition() << "," << shift.GetXShift() << "," 
+        << shift.GetYShift() << "," << shift.GetZShift() << ","; 
+
+      if (magnet_to_ratio.find(magnet) != magnet_to_ratio.end()) {
+        f << magnet_to_ratio.at(magnet);
+      } else {
+        f << "1";
+      }
+
+      if (local_run_id == 1) {
+        for (const auto& [var_name, rms] : var_name_to_rms) {
+          f << "," << rms << "," << var_name_to_mean.at(var_name);
+        }
+      } else {
+        f << ",,,,,,,,,,,,,,";
+      }
+      ++local_run_id;
+      f << "\n";
+    }
+  }
+  
+  if (!magnet_to_ratio.empty()) {
+    for (const auto& [magnet, ratio] : magnet_to_ratio) {
+      if (magnet_to_shift.find(magnet) == magnet_to_shift.end()) {
+        f << run_id << "_" << local_run_id << "," 
+          << magnet.GetName() << "," 
+          << magnet.GetPosition() << "," << 0 << "," << 0 << "," << 0 << ","; 
+
+        f << ratio;
+
+        if (local_run_id == 1) {
+          for (const auto& [var_name, rms] : var_name_to_rms) {
+            f << "," << rms << "," << var_name_to_mean.at(var_name);
+          }
+        } else {
+          f << ",,,,,,,,,,,,,,";
+        }
+        ++local_run_id;
+        f << "\n";
+      }
+    }
+  }
+  
+  f.close();
 }
 
 int main() {
   std::string optics_file_name = "optics_PPSS_2020/alfaTwiss1.txt_beta40cm_6500GeV_y-185murad";
-  std::string changes_filename = "changes.csv";
-  std::string root_shifted_file_name = "root_PPSS_2020/1_shifted_pythia8_13TeV_protons_100k_transported_205m_beta40cm_6500GeV_y-185murad.root";
-  std::string root_default_file_name = "root_PPSS_2020/1pythia8_13TeV_protons_100k_transported_205m_beta40cm_6500GeV_y-185murad.root";
-
-  double strength_ratios[] = {0.95, 0.99, 0.995, 0.999, 1.001, 1.005, 1.01, 1.05};
-  double shift_values[] = {-0.0005, -0.0002, -0.0001, 0.0001, 0.0002, 0.0005};
+  std::string changes_fn = "HKICKER_variants.csv";
 
   ProtonTransport* p_default = new ProtonTransport;
 
   p_default->SetProcessedFileName(optics_file_name);
-  p_default->PrepareBeamline(false);
+  p_default->PrepareBeamline(false, true);
   p_default->simple_tracking(205.);
 
+  std::vector<Magnet> magnets = p_default->GetMagnets();
+
+  remove(changes_fn.c_str());
+
+  int run_id = 1;
+  TRandom* r = new TRandom();
+  for (int i = 0; i < 1; i++) {
+    std::cout << "Run: " << run_id 
+              << ", Changes fn: " << changes_fn 
+              << std::endl;
+
+    ProtonTransport* p = new ProtonTransport;
+    p->SetProcessedFileName(optics_file_name);
+    p->PrepareBeamline(false);
+
+    for (const auto& magnet : magnets) {
+      //if (magnet.GetType() == "QUADRUPOLE") {
+        p->SetShift(magnet, Shift(0.00025, 
+                                  0.00025, 
+                                  0.001));
+      //}
+      p->SetStrengthRatio(magnet,1.0005);
+    }
+
+    p->simple_tracking(205.);
+
+    DistributionsDifference* diff = new DistributionsDifference(p_default->GetROOTOutputFileName(), 
+                                                                p->GetROOTOutputFileName());
+    p->WriteChangesInCsv(changes_fn, diff, run_id++);
+
+    std::cout << "done\n\n"; 
+    delete p;
+  }
   delete p_default;
-
-  for (int i = 0; i < sizeof(shift_values)/sizeof(shift_values[0]); i++) {
-    ProtonTransport* p_shifted = new ProtonTransport;
-
-    p_shifted->SetProcessedFileName(optics_file_name);
-    p_shifted->PrepareBeamline(false);
-    p_shifted->SetShift(Quadrupole(1), Shift(shift_values[i], 0, 0));
-    p_shifted->simple_tracking(205.);
-
-    DistributionsDifference* diff = new DistributionsDifference(root_default_file_name, root_shifted_file_name);
-    std::map<std::string, double> var_name_to_rms = diff->GetRMSs("histos_1d_diffs");
-    std::map<std::string, double> var_name_to_mean = diff->GetMeans("histos_1d_diffs");
-
-    std::map<std::string, double> var_name_to_rms_2D = diff->GetRMSs_2D("histos_2d_diffs");
-    std::map<std::string, double> var_name_to_mean_2D = diff->GetMeans_2D("histos_2d_diffs");
-
-    std::cout << "RMSs for shifted Quadrupole(1) by x axis values dx = " 
-              << std::to_string(shift_values[i]) << std::endl;
-    
-    for (const auto& [var_name, rms] : var_name_to_rms) {
-      std::cout << var_name << " distribution RMS = " 
-                << rms << std::endl; 
-    }
-
-    std::cout << "Means for shifted Quadrupole(1) by x axis values dx = " 
-              << std::to_string(shift_values[i]) << std::endl;
-    for (const auto& [var_name, mean] : var_name_to_mean) {
-      std::cout << var_name << " distribution Mean = " 
-                << mean << std::endl; 
-    }
-
-    for (const auto& [var_name, rms] : var_name_to_rms_2D) {
-      std::cout << var_name << " distribution RMS = " 
-                << rms << std::endl; 
-    }
-
-    std::cout << "Means for shifted Quadrupole(1) by x axis values dx = " 
-              << std::to_string(shift_values[i]) << std::endl;
-    for (const auto& [var_name, mean] : var_name_to_mean_2D) {
-      std::cout << var_name << " distribution Mean = " 
-                << mean << std::endl; 
-    }
-
-
-
-
-
-    delete p_shifted;
-  }
-
-  for (int i = 0; i < sizeof(strength_ratios)/sizeof(strength_ratios[0]); i++) {
-    ProtonTransport* p_ratio = new ProtonTransport;
-
-    p_ratio->SetProcessedFileName(optics_file_name);
-    p_ratio->PrepareBeamline(false);
-    p_ratio->SetStrengthRatio(Quadrupole(1), strength_ratios[i]);
-    p_ratio->simple_tracking(205.);
-
-    delete p_ratio;
-  }
-
-
-  //char path_to_optic_files[] = "optics_PPSS_2020/";
-  //TSystemDirectory* dir = new TSystemDirectory(path_to_optic_files, path_to_optic_files);
-  //TList* list_of_files = dir->GetListOfFiles();
-
-  //if (list_of_files) {
-  //  TSystemFile* file;
-  //  TString fname;
-  //  TIter next(list_of_files);
-
-  //  while (file=(TSystemFile*)next()) {
-  //    fname = file->GetName();
-  //    if (!file->IsDirectory() && fname.BeginsWith("alfaTwiss")) {
-  //      ProtonTransport* p_default = new ProtonTransport;
-  //      ProtonTransport* p_shifted = new ProtonTransport;
-
-  //      std::string fname_str = string(path_to_optic_files) + string(fname.Data());
-  //      std::cout << "Processing fie: " << fname_str << std::endl;
-
-  //      p_default->PrepareBeamline(fname_str, false);
-  //      p_default->simple_tracking(205., fname_str);
-
-  //      p_shifted->PrepareBeamline(fname_str, false);
-  //      p_shifted->SetShift(Dipole{1}, Shift{0.0005, 0, 0});
-  //      p_shifted->simple_tracking(205., fname_str);
-
-  //      delete p_default, p_shifted;
-  //    }
-  //  }
-  //}
 
   return 0;
 }
+
