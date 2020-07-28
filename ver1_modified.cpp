@@ -139,10 +139,9 @@ class ProtonTransport {
     void SetPositions();
     std::vector<Magnet> GetMagnets() const;
     void SetMagnets(const std::vector<Magnet>&); 
-    bool isLost(double, double, double, double, double, double);
     bool is_current_lost=false;
     double sigma = 0; // sigma = sqrt(eps * beta / gamma) sqrt(10e-2 m * 10e-6 m * rad) 
-    string collimator_name = "";
+    unsigned int test_it = 0;
   private:
     double IP1Pos;
     double x, y, z, px, py, pz, sx, sy;
@@ -161,11 +160,12 @@ class ProtonTransport {
     bool BeampipesAreSeparated;
     double BeampipeSeparation;
     void Marker(bool);
-    void simple_drift(double, bool, double, double, double, double);
+    void simple_drift(double, bool, double, double, double, double, bool);
     void simple_rectangular_dipole(double, double, double, double, double, double);
     void simple_horizontal_kicker(double, double, double, double, double, double);
     void simple_vertical_kicker(double, double, double, double, double, double);
     void simple_quadrupole(double, double, double, double, double, double, bool);
+    bool isLost(double, double, double, double, double, double);
     vector <vector <string> > element;
     bool DoApertureCut;
 };
@@ -253,22 +253,29 @@ void ProtonTransport::Marker(bool verbose=false){
 	//cout << z << "\t" << x << "\t" << y << "\t" << sx*pz << "\t" << sy*pz << endl;
 }  
 
-void ProtonTransport::simple_drift(double L, bool verbose=false, double rect_x=0, double rect_y=0, double el_x=0, double el_y=0){
+void ProtonTransport::simple_drift(double L, bool verbose=false, double rect_x=0, double rect_y=0, double el_x=0, double el_y=0, bool is_collimator=false){
   double x0 = x;
   double y0 = y;
   double z0 = z;
+
   x0+=L*sx;
   y0+=L*sy;
   z0+=L;
-  if (collimator_name == "RCOLLIMATOR1" || collimator_name == "RCOLLIMATOR2") {
-    if (!isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
+
+  if (is_collimator) {
+    if (!ProtonTransport::isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
       x = x0;
       y = y0;
       z = z0;
     } else {
+      std::cout << "Lost proton num: " <<  ++test_it << std::endl;
       lost_protons.push_back(std::vector<double>{px, py, pz});
     }
-  } 
+  } else {
+    x = x0;
+    y = y0;
+    z = z0;
+  }
 
   if (!verbose) return;
   cout << "DRIFT\t";
@@ -302,7 +309,7 @@ void ProtonTransport::simple_rectangular_dipole(double L, double K0L, double rec
   y0 += L*sy;
   sx0 += K0L*beam_energy/pz;
   //sy does not change
-  if (!isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
+  if (!ProtonTransport::isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
     x = x0;
     y = y0;
     z = z0;
@@ -334,7 +341,7 @@ void ProtonTransport::simple_horizontal_kicker(double L, double HKICK, double re
   x0 += L*sx + L*0.5*HKICK*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
   y0 += L*sy;
   sx0 += HKICK*beam_energy/pz;
-  if (!isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
+  if (!ProtonTransport::isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
     x = x0;
     y = y0;
     z = z0;
@@ -365,7 +372,7 @@ void ProtonTransport::simple_vertical_kicker(double L, double VKICK, double rect
   x0 += L*sx;
   y0 += L*sy + L*0.5*VKICK*beam_energy/pz; // length * initial slope + length * half of angle (from geometry) * correction due to energy loss
   sy0 += VKICK*beam_energy/pz;
-  if (!isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
+  if (!ProtonTransport::isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
     x = x0;
     y = y0;
     z = z0;
@@ -465,7 +472,7 @@ void ProtonTransport::simple_quadrupole(double L, double K1L, double rect_x, dou
     fabs(sx0) > 1.e-15 ? sx0 = cosh(qkl) * sx0          : sx0 = 0.;
     fabs(x_tmp)  > 1.e-15 ? sx0 += qk * sinh(qkl) * x_tmp : sx0 += 0.;
   }
-  if (!isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
+  if (!ProtonTransport::isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
     x = x0;
     y = y0;
     z = z0;
@@ -608,18 +615,11 @@ void ProtonTransport::SetMagnets(const std::vector<Magnet>& magnets_) {
 }
 
 bool ProtonTransport::isLost(double x0, double y0, double rect_x, double rect_y, double el_x, double el_y) {
-  //if (collimator_name == "RCOLLIMATOR1") {
-  //  rect_x = 15 * sigma;
-  //  el_x = 15 * sigma;
-  //} else if (collimator_name == "RCOLLIMATOR2") {
-  //  rect_x = 35 * sigma;
-  //  el_x = 35 * sigma;
-  //}
-
   if ((x0*x0/(el_x*el_x) + y0*y0/(el_y*el_y) > 1) || ((fabs(x0) > rect_x) || (fabs(y0) > rect_y))) {
     is_current_lost=true;
     return 1;
   } else {
+    is_current_lost=false;
     return 0;
   }
 }
@@ -788,17 +788,24 @@ void ProtonTransport::simple_tracking(double obs_point){
     }
     else if (stod(element[a].at(1)) == 150.53) 
     {
-      // 15 * sigma   
-      collimator_name = "RCOLLIMATOR1";
-      ProtonTransport::simple_drift(stod(element[a].at(2)), false, stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13))); 
-      collimator_name = "";
+      //double rect_x = 15 * sigma;
+      //double el_x = 15 * sigma;
+      double rect_x = stod(element[a].at(10));
+      double el_x = stod(element[a].at(12));
+      ProtonTransport::simple_drift(stod(element[a].at(2)), false, rect_x, stod(element[a].at(11)), el_x, stod(element[a].at(13)), true); 
+      if (is_current_lost)
+        std::cout << "RC1: " << is_current_lost << std::endl;
     }
     else if (stod(element[a].at(1)) == 184.857)
     {
-      // 45 * sigma 
-      collimator_name = "RCOLLIMATOR2";
-      ProtonTransport::simple_drift(stod(element[a].at(2)), false, stod(element[a].at(10)), stod(element[a].at(11)), stod(element[a].at(12)), stod(element[a].at(13))); 
-      collimator_name = "";
+      // 35 * sigma 
+      //double rect_x = 35 * sigma;
+      //double el_x = 35 * sigma;
+      double rect_x = stod(element[a].at(10));
+      double el_x = stod(element[a].at(12));
+      ProtonTransport::simple_drift(stod(element[a].at(2)), false, rect_x, stod(element[a].at(11)), el_x, stod(element[a].at(13)), true); 
+      if (is_current_lost)
+        std::cout << "RC2: " << is_current_lost << std::endl;
     }
 /*
    The following elements are taken as a drift (if L!=0) or monitor (if L=0):
