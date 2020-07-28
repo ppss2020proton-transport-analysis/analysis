@@ -140,7 +140,7 @@ class ProtonTransport {
     std::vector<Magnet> GetMagnets() const;
     void SetMagnets(const std::vector<Magnet>&); 
     bool is_current_lost=false;
-    bool is_current_collimator=false;
+
     double sigma1 = 0; // sigma = sqrt(eps * beta / gamma) sqrt(10e-2 m * 10e-6 m * rad) 
     double sigma2 = 0; // sigma = sqrt(eps * beta / gamma) sqrt(10e-2 m * 10e-6 m * rad) 
     unsigned int test_it = 0;
@@ -266,7 +266,6 @@ void ProtonTransport::simple_drift(double L, bool verbose=false, double rect_x=0
   z0+=L;
 
   if (is_collimator) {
-    is_current_collimator=true;
     if (!ProtonTransport::isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
       x = x0;
       y = y0;
@@ -280,7 +279,6 @@ void ProtonTransport::simple_drift(double L, bool verbose=false, double rect_x=0
     z = z0;
   }
 
-  is_current_collimator=false;
   if (!verbose) return;
   cout << "DRIFT\t";
   cout << "z [m]: " << z;
@@ -619,17 +617,6 @@ void ProtonTransport::SetMagnets(const std::vector<Magnet>& magnets_) {
 }
 
 bool ProtonTransport::isLost(double x0, double y0, double rect_x, double rect_y, double el_x, double el_y) {
-  if(is_current_collimator==true){
-    if  ((fabs(x0) > rect_x) || (fabs(y0) > rect_y)) {
-    is_current_lost=true;
-    return 1;
-  } 
-  else {
-    is_current_lost=false;
-    return 0;
-  }
-
-  }
   if ((x0*x0/(el_x*el_x) + y0*y0/(el_y*el_y) > 1) || ((fabs(x0) > rect_x) || (fabs(y0) > rect_y))) {
     is_current_lost=true;
     return 1;
@@ -816,7 +803,7 @@ void ProtonTransport::simple_tracking(double obs_point){
     else if (fabs(stod(element[a].at(1)) - 184.857) < 1e-10)
     {
       // 35 * sigma 
-      double rect_x = 1 * sigma2;
+      double rect_x = 35 * sigma2;
       double el_x = stod(element[a].at(12));
       //double el_x =  5 * sigma2;
       //double rect_x = stod(element[a].at(10));
@@ -1007,9 +994,9 @@ int main() {
 
     for (const auto& magnet : magnets) {
       //if (magnet.GetType() == "QUADRUPOLE") {
-        p->SetShift(magnet, Shift(0.00025, 
-                                  0.00025, 
-                                  0.001));
+        p->SetShift(magnet, Shift(-0.00085, 
+                                  -0.00085, 
+                                  0.005));
       //}
       p->SetStrengthRatio(magnet,1.0005);
     }
