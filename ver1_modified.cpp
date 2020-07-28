@@ -140,9 +140,11 @@ class ProtonTransport {
     std::vector<Magnet> GetMagnets() const;
     void SetMagnets(const std::vector<Magnet>&); 
     bool is_current_lost=false;
+    bool is_current_collimator=false;
     double sigma1 = 0; // sigma = sqrt(eps * beta / gamma) sqrt(10e-2 m * 10e-6 m * rad) 
     double sigma2 = 0; // sigma = sqrt(eps * beta / gamma) sqrt(10e-2 m * 10e-6 m * rad) 
     unsigned int test_it = 0;
+
   private:
     double IP1Pos;
     double x, y, z, px, py, pz, sx, sy;
@@ -264,6 +266,7 @@ void ProtonTransport::simple_drift(double L, bool verbose=false, double rect_x=0
   z0+=L;
 
   if (is_collimator) {
+    is_current_collimator=true;
     if (!ProtonTransport::isLost(x0, y0, rect_x, rect_y, el_x, el_y)) {
       x = x0;
       y = y0;
@@ -277,6 +280,7 @@ void ProtonTransport::simple_drift(double L, bool verbose=false, double rect_x=0
     z = z0;
   }
 
+  is_current_collimator=false;
   if (!verbose) return;
   cout << "DRIFT\t";
   cout << "z [m]: " << z;
@@ -615,10 +619,22 @@ void ProtonTransport::SetMagnets(const std::vector<Magnet>& magnets_) {
 }
 
 bool ProtonTransport::isLost(double x0, double y0, double rect_x, double rect_y, double el_x, double el_y) {
+  if(is_current_collimator==true){
+    if  ((fabs(x0) > rect_x) || (fabs(y0) > rect_y)) {
+    is_current_lost=true;
+    return 1;
+  } 
+  else {
+    is_current_lost=false;
+    return 0;
+  }
+
+  }
   if ((x0*x0/(el_x*el_x) + y0*y0/(el_y*el_y) > 1) || ((fabs(x0) > rect_x) || (fabs(y0) > rect_y))) {
     is_current_lost=true;
     return 1;
-  } else {
+  } 
+  else {
     is_current_lost=false;
     return 0;
   }
@@ -632,8 +648,8 @@ void ProtonTransport::simple_tracking(double obs_point){
   double epsilon = 3.5 * 10e-6;
   sigma1 = sqrt(beta1 * epsilon / gamma);
   sigma2 = sqrt(beta2 * epsilon / gamma);
-  std::cout << "Sigma1 = " << 15 * sigma1 << std::endl;
-  std::cout << "Sigma2 = " << 35 * sigma2 << std::endl;
+  std::cout << "Sigma1 = " << 5 * sigma1 << std::endl;
+  std::cout << "Sigma2 = " << 5 * sigma2 << std::endl;
 
   int m_process_code;
   vector<float> *m_px;
@@ -791,7 +807,8 @@ void ProtonTransport::simple_tracking(double obs_point){
     else if (fabs(stod(element[a].at(1)) - 150.53) < 1e-10) 
     {
       double rect_x = 15 * sigma1;
-      double el_x = 15 * sigma1;
+      double el_x =  stod(element[a].at(12));
+      //double el_x =  5 * sigma1;
       //double rect_x = stod(element[a].at(10));
       //double el_x = stod(element[a].at(12));
       ProtonTransport::simple_drift(stod(element[a].at(2)), false, rect_x, stod(element[a].at(11)), el_x, stod(element[a].at(13)), true); 
@@ -799,8 +816,9 @@ void ProtonTransport::simple_tracking(double obs_point){
     else if (fabs(stod(element[a].at(1)) - 184.857) < 1e-10)
     {
       // 35 * sigma 
-      double rect_x = 35 * sigma2;
-      double el_x = 35 * sigma2;
+      double rect_x = 1 * sigma2;
+      double el_x = stod(element[a].at(12));
+      //double el_x =  5 * sigma2;
       //double rect_x = stod(element[a].at(10));
       //double el_x = stod(element[a].at(12));
       ProtonTransport::simple_drift(stod(element[a].at(2)), false, rect_x, stod(element[a].at(11)), el_x, stod(element[a].at(13)), true); 
