@@ -140,7 +140,8 @@ class ProtonTransport {
     std::vector<Magnet> GetMagnets() const;
     void SetMagnets(const std::vector<Magnet>&); 
     bool is_current_lost=false;
-    double sigma = 0; // sigma = sqrt(eps * beta / gamma) sqrt(10e-2 m * 10e-6 m * rad) 
+    double sigma1 = 0; // sigma = sqrt(eps * beta / gamma) sqrt(10e-2 m * 10e-6 m * rad) 
+    double sigma2 = 0; // sigma = sqrt(eps * beta / gamma) sqrt(10e-2 m * 10e-6 m * rad) 
     unsigned int test_it = 0;
   private:
     double IP1Pos;
@@ -268,7 +269,6 @@ void ProtonTransport::simple_drift(double L, bool verbose=false, double rect_x=0
       y = y0;
       z = z0;
     } else {
-      std::cout << "Lost proton num: " <<  ++test_it << std::endl;
       lost_protons.push_back(std::vector<double>{px, py, pz});
     }
   } else {
@@ -626,12 +626,14 @@ bool ProtonTransport::isLost(double x0, double y0, double rect_x, double rect_y,
 
 void ProtonTransport::simple_tracking(double obs_point){
 
-  double gamma = 6927.628/0.938;
-  double beta = 0.4;
+  double gamma = 6927.628566; // [no units]
+  double beta1 = 745.7519114; // [m]
+  double beta2 = 219.0364112; // [m]
   double epsilon = 3.5 * 10e-6;
-  sigma = sqrt(beta * epsilon / gamma);
-  std::cout << "Sigma1 = " << 15 * sigma << std::endl;
-  std::cout << "Sigma2 = " << 35 * sigma << std::endl;
+  sigma1 = sqrt(beta1 * epsilon / gamma);
+  sigma2 = sqrt(beta2 * epsilon / gamma);
+  std::cout << "Sigma1 = " << 15 * sigma1 << std::endl;
+  std::cout << "Sigma2 = " << 35 * sigma2 << std::endl;
 
   int m_process_code;
   vector<float> *m_px;
@@ -786,26 +788,22 @@ void ProtonTransport::simple_tracking(double obs_point){
       }
 
     }
-    else if (stod(element[a].at(1)) == 150.53) 
+    else if (fabs(stod(element[a].at(1)) - 150.53) < 1e-10) 
     {
-      //double rect_x = 15 * sigma;
-      //double el_x = 15 * sigma;
-      double rect_x = stod(element[a].at(10));
-      double el_x = stod(element[a].at(12));
+      double rect_x = 15 * sigma1;
+      double el_x = 15 * sigma1;
+      //double rect_x = stod(element[a].at(10));
+      //double el_x = stod(element[a].at(12));
       ProtonTransport::simple_drift(stod(element[a].at(2)), false, rect_x, stod(element[a].at(11)), el_x, stod(element[a].at(13)), true); 
-      if (is_current_lost)
-        std::cout << "RC1: " << is_current_lost << std::endl;
     }
-    else if (stod(element[a].at(1)) == 184.857)
+    else if (fabs(stod(element[a].at(1)) - 184.857) < 1e-10)
     {
       // 35 * sigma 
-      //double rect_x = 35 * sigma;
-      //double el_x = 35 * sigma;
-      double rect_x = stod(element[a].at(10));
-      double el_x = stod(element[a].at(12));
+      double rect_x = 35 * sigma2;
+      double el_x = 35 * sigma2;
+      //double rect_x = stod(element[a].at(10));
+      //double el_x = stod(element[a].at(12));
       ProtonTransport::simple_drift(stod(element[a].at(2)), false, rect_x, stod(element[a].at(11)), el_x, stod(element[a].at(13)), true); 
-      if (is_current_lost)
-        std::cout << "RC2: " << is_current_lost << std::endl;
     }
 /*
    The following elements are taken as a drift (if L!=0) or monitor (if L=0):
