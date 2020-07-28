@@ -24,7 +24,7 @@ int main() {
 
 
   TFile* file_optics1 = new TFile(			
-    "root_PPSS_2020/def_shifted__changed_strength_pythia8_13TeV_protons_100k_transported_205m_beta40cm_6500GeV_y-185murad.root");		//This file contains results of transport code without any shifts
+    "root_PPSS_2020/1pythia8_13TeV_protons_100k_transported_205m_beta40cm_6500GeV_y-185murad.root");		//This file contains results of transport code without any shifts
 
 
   TFile* file_optics2 = new TFile(
@@ -55,6 +55,8 @@ int main() {
   tree_optics1->SetBranchAddress("pz", &pz);
 
   Long64_t nentries = tree_optics1->GetEntriesFast();
+  Long64_t nentries2 = tree_optics2->GetEntriesFast();
+  cout<<"Difference in protons: "<<nentries- nentries2<<'\n';
   //std::cout<< std::endl << "Number of entries: " << nentries << std::endl<< std::endl;
 
 
@@ -71,19 +73,36 @@ int main() {
   // TH2F* x_vs_y_chang = new TH2F("x_vs_y_chang", "Reduced;x;y;nOfEvents",
   //     100,tree_optics2->GetMinimum("x"),tree_optics2->GetMaximum("x") , 100, tree_optics2->GetMinimum("y"), tree_optics2->GetMaximum("y"));
 
-  TH2F* x_vs_y_def = new TH2F("x_vs_y_def", "Default;x;y;nOfEvents",
-       100,tree_optics1->GetMinimum("x"),tree_optics1->GetMaximum("x") , 100, tree_optics1->GetMinimum("y"), tree_optics1->GetMaximum("y"));
+  double x_min,x_max,y_min,y_max;
+  x_min=min(tree_optics1->GetMinimum("x"),tree_optics2->GetMinimum("x"));
+  x_max=max(tree_optics1->GetMaximum("x"),tree_optics2->GetMaximum("x"));
+  y_min=min(tree_optics1->GetMinimum("y"),tree_optics2->GetMinimum("y"));
+  y_max=max(tree_optics1->GetMaximum("y"),tree_optics2->GetMaximum("y"));
 
-  TH2F* x_vs_y_chang = new TH2F("x_vs_y_chang", "Reduced;x;y;nOfEvents",
-      100,tree_optics2->GetMinimum("x"),tree_optics2->GetMaximum("x") , 100, tree_optics2->GetMinimum("y"), tree_optics2->GetMaximum("y"));
+
+  TH2F* x_vs_y_def = new TH2F("x_vs_y_def", "Default;x [m];y [m];nOfEvents",
+       200,x_min,x_max , 200,y_min, y_max);
+
+//   TH2F* x_vs_y_chang = new TH2F("x_vs_y_chang", "Reduced;x [m];y [m];nOfEvents",
+//       200,tree_optics1->GetMinimum("x"),tree_optics1->GetMaximum("x") , 200, tree_optics1->GetMinimum("y"), tree_optics1->GetMaximum("y"));
+ TH2F* x_vs_y_chang = new TH2F("x_vs_y_chang", "Reduced;x [m];y [m];nOfEvents",
+       200,x_min,x_max , 200,y_min, y_max);
 
 
 
   for (Int_t i = 0; i < nentries; i++) {
     tree_optics1->GetEntry(i);
-    tree_optics2->GetEntry(i);
+
 
     x_vs_y_def->Fill(x1, y1);
+
+
+  }
+  for (Int_t i = 0; i < nentries2; i++) {
+
+    tree_optics2->GetEntry(i);
+
+
     x_vs_y_chang->Fill(x2, y2);
 
   }
@@ -96,7 +115,7 @@ int main() {
   canvas_diffs_2d->SaveAs((filename_2d + "[").c_str());
 
 
-
+  gStyle->SetOptStat(0);
   x_vs_y_def->Draw("colz");
   canvas_diffs_2d->SaveAs(filename_2d.c_str());
   canvas_diffs_2d->Clear();
