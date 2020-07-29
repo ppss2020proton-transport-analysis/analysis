@@ -677,9 +677,12 @@ void ProtonTransport::simple_tracking(double obs_point){
 
   int nevents = ntuple->GetEntries();
   
-  int n_process_code;
+  int n_process_code,n_ev_id;
   float n_px, n_py, n_pz, n_e;
   float n_x, n_y, n_sx, n_sy;
+  bool n_is_lost;
+
+
 
   FileName* fn = new FileName(processed_filename, !magnet_to_shift.empty(), !magnet_to_ratio.empty());
   fn->ProcessFileName();
@@ -701,6 +704,8 @@ void ProtonTransport::simple_tracking(double obs_point){
   tree->Branch("y", &n_y);
   tree->Branch("sx", &n_sx);
   tree->Branch("sy", &n_sy);
+  tree->Branch("ev_id", &n_ev_id);
+  tree->Branch("is_lost", &n_is_lost);
   
   for (int evt=0; evt<nevents; evt++)
   {
@@ -825,6 +830,22 @@ void ProtonTransport::simple_tracking(double obs_point){
     }
 
     if (is_current_lost) {
+      
+
+      n_process_code =  m_process_code;
+      n_px = m_px->at(0);
+      n_py = m_py->at(0);
+      n_pz = m_pz->at(0);
+      n_e = m_e->at(0);
+      n_x = x - sx*(z - obs_point);
+      n_y = y - sy*(z - obs_point);
+      n_sx = sx;
+      n_sy = sy;
+      n_ev_id=evt;
+      n_is_lost=is_current_lost;
+
+      tree->Fill();
+      
       is_current_lost=false;
       break;
     }
@@ -846,7 +867,9 @@ void ProtonTransport::simple_tracking(double obs_point){
       n_y = y - sy*(z - obs_point);
       n_sx = sx;
       n_sy = sy;
-      
+      n_ev_id=evt;
+      n_is_lost=is_current_lost;
+
       tree->Fill();
       
       
@@ -969,7 +992,7 @@ void ProtonTransport::WriteChangesInCsv(const std::string& filename, Distributio
 
 int main() {
   std::string optics_file_name = "optics_PPSS_2020/alfaTwiss1.txt_beta40cm_6500GeV_y-185murad";
-  std::string changes_fn = "HKICKER_variants.csv";
+  std::string changes_fn = "multiple_changes_inst2.csv";
 
   ProtonTransport* p_default = new ProtonTransport;
 
@@ -983,22 +1006,22 @@ int main() {
 
   int run_id = 1;
   TRandom* r = new TRandom();
-  for (int i = 0; i < 1; i++) {
-    std::cout << "Run: " << run_id 
-              << ", Changes fn: " << changes_fn 
-              << std::endl;
-
+  for (int i = 0; i < 100; i++) {
+    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+    std::cout << "Run: " << run_id << std::endl;
+    
     ProtonTransport* p = new ProtonTransport;
     p->SetProcessedFileName(optics_file_name);
     p->PrepareBeamline(false);
 
-    for (const auto& magnet : magnets) {
-      //if (magnet.GetType() == "QUADRUPOLE") {
-        p->SetShift(magnet, Shift(-0.00085, 
-                                  -0.00085, 
-                                  0.005));
-      //}
-      p->SetStrengthRatio(magnet,1.0005);
+  for (const auto& magnet : magnets) {
+     // if (magnet.GetType() == "DIPOLE") {
+        p->SetShift(magnet, Shift(r->Gaus(0, 0.00025), 
+                                  r->Gaus(0, 0.00025), 
+                                  r->Gaus(0, 0.001)));
+
+        p->SetStrengthRatio(magnet,r->Gaus(1, 0.0005));
+     // }
     }
 
     p->simple_tracking(205.);
@@ -1009,6 +1032,8 @@ int main() {
 
     std::cout << "done\n\n"; 
     delete p;
+    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    std::cout << "Execution time = " << (double)std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()/1000 << "[s]" << std::endl;
   }
   delete p_default;
 
